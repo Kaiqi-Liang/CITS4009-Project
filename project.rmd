@@ -1,0 +1,515 @@
+---
+title: "CITS4009 Computational Data Analysis"
+subtitle: "Project 1 - Exploratory Data Analysis"
+
+graphics: yes
+author: <i>Kaiqi Liang (23344153)</i>
+date: "Semester 2, 2022"
+
+output:
+  html_document:
+    includes:
+      before_body: style.html
+    number_sections: true
+
+---
+
+# Introduction
+The dataset for this project is Australia's data science job listings for August 2022 which can be downloaded on [Kaggle](https://www.kaggle.com/datasets/nadzmiagthomas/australia-data-science-jobs). It was scrapped from [Glassdoor](https://www.glassdoor.com.au) which is a website where current and former employees anonymously review companies.
+
+# Setup
+Load libraries and data.
+
+```{r, message = FALSE}
+library(ggplot2)
+library(WVPlots)
+library(ozmaps)
+library(sf)
+library(dplyr)
+library(gridExtra)
+
+df <- read.csv(file = "AustraliaDataScienceJobs.csv", header = TRUE)
+
+# prevent using scientific notation when plotting
+options(scipen = 100)
+
+# Replace empty strings with NA
+df[df == ""] <- NA
+```
+
+Code to allow truncating text output especially for `str()` and `head()` functions.
+
+```{r class.source = "fold-hide"}
+# save the built-in output hook
+hook_output <- knitr::knit_hooks$get("output")
+
+# set a new output hook to truncate text output
+knitr::knit_hooks$set(output = function(x, options) {
+  if (!is.null(n <- options$out.lines)) {
+    x <- xfun::split_lines(x)
+    if (length(x) > n) {
+      # truncate the output
+      x <- c(head(x, n), "....\n")
+    }
+    x <- paste(x, collapse = "\n")
+  }
+  hook_output(x, options)
+})
+```
+
+Set up a custom theme so all the plots can be standardised as well as having the ability to customise to their needs.
+```{r}
+custom_theme <- function(
+  title_y_r_margin = 10,
+  title_x_t_margin = 10,
+  title_b_margin = 20,
+  title_size = 20,
+  label_size = 16,
+  font_size = 14
+) {
+  theme(
+    axis.title.x = element_text(margin = margin(t = title_x_t_margin)),
+    axis.title.y = element_text(margin = margin(r = title_y_r_margin)),
+    axis.title = element_text(size = label_size),
+    plot.title = element_text(
+      size = title_size,
+      margin = margin(b = title_b_margin)
+    ),
+    text = element_text(size = font_size)
+  )
+}
+```
+
+# Data Cleaning
+Use `str()` to have a glance at the data.
+
+```{r, out.lines = 30}
+str(df)
+```
+
+There are 2088 observations of 53 variables.
+
+Some columns just have a really long chunk of text `Job Descriptions` and `URL` in particular, which are not that useful so we can drop them entirely.
+
+```{r}
+df <- df[!names(df) %in% c("Job.Descriptions", "Url")]
+```
+
+All the variables that end with `_yn` contain only `1`s and `0`s which should be converted to `logical`.
+
+```{r}
+skill_columns <- grep("_yn", names(df))
+df[skill_columns] <- sapply(df[skill_columns], function(col) {
+  as.logical(col)
+})
+```
+
+Then inspect the data again using `head()` to look at the first 3 observations.
+
+```{r, out.lines = 33}
+head(df, 3)
+```
+
+Looking much cleaner. Now count the missing values in each variable.
+
+```{r}
+count_nas <- function() {
+  na_counts <- sapply(df, function(col) length(which(is.na(col))))
+  na_counts[which(na_counts > 0)]
+}
+count_nas()
+```
+
+The 3 jobs that do not even have a `Title` should be dropped.
+
+```{r}
+df <- df[!is.na(df$Job.Title), ]
+count_nas()
+```
+
+The variable `Company Founded` is the year when the company is founded in and `Company CEO Approval` is the percentage of employees who approve their CEO. They both have around 40% of missing values, the first one is probably because the companies did not enter the year founded and the second one might be because the employees are scared to say about their CEO. Due to these reasons they do not have enough useful information to be kept.
+
+```{r}
+df <- df[!names(df) %in% c("Company.Founded", "Company.CEO.Approval")]
+count_nas()
+```
+
+All 3 variables `Company Size`, `Company Type` and `Company Revenue` are missing 180 observations, let's see if they are the same ones.
+
+```{r}
+summary(cbind(
+  which(is.na(df$Company.Size)),
+  which(is.na(df$Company.Type)),
+  which(is.na(df$Company.Revenue))
+))
+```
+
+The missing values in all 3 columns appear to be in the exact same locations. As it is almost 10% of the total number of observations, let's see if they are also missing the rating data.
+
+```{r}
+rating_columns <- c(
+  "Company.Rating",
+  "Company.Career.Opportinities",
+  "Compensation.and.Benefits",
+  "Company.Culture.and.Values",
+  "Company.Senior.Management",
+  "Company.Work.Life.Balance",
+  "Company.Friend.Reccomendation"
+)
+any(!is.na(df[is.na(df$Company.Size), rating_columns]))
+```
+
+Looks like all the 180 jobs are missing the rating data as well, we can just remove them all.
+
+```{r}
+df <- df[!is.na(df$Company.Size), ]
+count_nas()
+```
+
+Now there are still 130 missing values for `Company Rating` and `Company Number of Rater`, again check whether they're from the same observations.
+
+```{r}
+any(is.na(df$Company.Rating) != is.na(df$Companny.Number.of.Rater))
+```
+
+Not a single `NA` in `Company Rating` is different from the ones in `Company Number of Rater` which means they are indeed from the same observations. This makes sense because if the number of rater doesn't exist then there shouldn't be any ratings either, so the missing values in `Company Number of Rater` can be replaced with 0 indicating no one rated and the rating is an approximation based off the mean rating.
+
+```{r}
+df$Companny.Number.of.Rater[is.na(df$Companny.Number.of.Rater)] <- 0
+```
+
+Have a peak at the summary of the rating columns.
+```{r}
+summary(df[rating_columns])
+```
+
+Since the `Company Rating` is just a number out of 5 we can replace them with the mean value, similarly for `Career Opportinities`, `Compensation and Benefits`, `Company Culture and Values`, `Company Senior Management` and `Work Life Balance`. With regards to `Company Friend Reccomendation`, it is just another rating but out of 100, we can do the same for all of them.
+
+```{r}
+df[rating_columns] <- sapply(df[rating_columns], function(column) {
+  na <- is.na(column)
+  column[na] <- mean(!na)
+  column
+})
+count_nas()
+```
+
+The 2 variables left both have 386 missing values, check one last time if they are from the same observations.
+
+```{r}
+any(is.na(df$Company.Sector) != is.na(df$Company.Industry))
+```
+
+Same result as before, and since they are categorical, their missing values can just be replaced with a new category `Unknown`.
+
+```{r}
+industry_column <- c("Company.Sector", "Company.Industry")
+df[industry_column] <- sapply(df[industry_column], function(column) {
+  column[is.na(column)] <- "Unknown"
+  column
+})
+count_nas()
+```
+
+Finally there are no more missing values.
+
+# Visualisation
+## Job Locations
+```{r}
+df_locations <- as.data.frame(table(df$Job.Location))
+colnames(df_locations) <- c("Location", "Number.of.Jobs")
+
+ggplot(
+  df_locations[df_locations$Number.of.Jobs > 10, ],
+  aes(
+    x = reorder(Location, Number.of.Jobs),
+    y = Number.of.Jobs
+  ),
+) +
+  geom_bar(
+    stat = "identity",
+    width = 0.6,
+    fill = "purple"
+  ) +
+  geom_text(
+    aes(label = Number.of.Jobs),
+    hjust = 0
+  ) +
+  labs(
+    x = "Job Location",
+    title = "Locations with the highest number of jobs"
+  ) +
+  annotate("text", x = 12, y = 220, label = "This is not a city") +
+  annotate("segment", x = 12, y = 150, xend = 12, yend = 80, arrow = arrow(
+    type = "closed", length = unit(0.02, "npc")
+  )) +
+  coord_flip() +
+  custom_theme(
+    title_b_margin = 10,
+    title_size = 14,
+    label_size = 12,
+    font_size = 11
+  )
+```
+
+Locations where there are more than 10 number of jobs offered from the highest to the lowest. The 6th location is `Australia` should be changed to `Unknown` as all the other locations are cities other than countries. The reason for this category to appear could either be there are multiple locations in Australia or not sure the exact location.
+
+```{r}
+df$Job.Location[df$Job.Location == "Australia"] <- "Unknown"
+```
+
+Let's look at the distribution in terms of states.
+
+```{r, out.width="50%"}
+ClevelandDotPlot(
+  df,
+  "State",
+  sort = 1,
+  title = "Jobs Distribution by State"
+) +
+  coord_flip() +
+  custom_theme(title_y_r_margin = 20, title_x_t_margin = 5)
+```
+
+Just looking at the first 5 locations they are all capital cities of their state which makes the state ranking the same. We can plot the Australia states map to see the jobs distribution more clearly.
+
+```{r, out.width="50%"}
+sf_oz <- ozmap_data("states")
+
+jobs <- as.data.frame(table(df$State))
+colnames(jobs) <- c("NAME", "Jobs")
+
+ggplot(merge(sf_oz, jobs, all.x = TRUE)) +
+  geom_sf(aes(fill = Jobs)) +
+  labs(
+    x = "Longitude",
+    y = "Latitude"
+  ) +
+  custom_theme()
+```
+
+## Salary
+```{r, out.width="50%"}
+salary_columns <- c("Estimate.Base.Salary", "Low.Estimate", "High.Estimate")
+df_salary <- df[salary_columns]
+df_salary <- data.frame(
+  salary = rep(salary_columns, rep(nrow(df_salary), length(salary_columns))),
+  amount = c(
+    df_salary$Estimate.Base.Salary,
+    df_salary$Low.Estimate,
+    df_salary$High.Estimate
+  )
+)
+
+ggplot(df_salary) +
+  geom_boxplot(
+    aes(x = salary, y = amount),
+    fill = "green",
+    outlier.colour = "red",
+  ) +
+  theme(
+    axis.text.x = element_text(vjust = -1),
+  ) +
+  custom_theme(title_x_t_margin = 15)
+```
+
+In job descriptions the salary package is often provided as a range rather than a fixed number as there is room for negotiation, the lower end of the range is `Low Estimate` and the higher end is `High Estimate`, `Estimate Base Salary` is the average of the two.
+
+As we can see from the box plot there are many outliers with really high starting salary and no outliers on the minimum wage. Since all 3 variables have similar distribution we'll just use the `Estimate Base Salary` for base salaries from now on as it is more reprentative.
+
+Let's find out who the outliers are that offer such high income.
+
+```{r}
+df_salary <- df[
+  !duplicated(df$Estimate.Base.Salary),
+  c(
+    "Company",
+    "Estimate.Base.Salary",
+    "Company.Revenue"
+  )
+]
+print(
+  head(df_salary[order(-df_salary$Estimate.Base.Salary), ], 10),
+  row.names = FALSE
+)
+```
+
+Looks like a couple multi billion dollar companies are, especially `Indeed` who offers multiple highest income jobs which makes sense as they have the revenue to do so. However majority of the jobs still have a starting salary just below 100k as shown by the density plot below.
+
+```{r, out.width="50%"}
+ggplot(df) +
+  geom_density(
+    aes(x = Estimate.Base.Salary),
+    color = "darkred"
+  ) +
+  theme(
+    axis.text.x = element_text(hjust = 1, vjust = -0.5)
+  ) +
+  custom_theme(title_y_r_margin = 15, title_x_t_margin = 15)
+```
+
+## Company
+```{r, out.width="70%"}
+df_companies <- as.data.frame(table(df$Company))
+colnames(df_companies) <- c("Company", "Number.of.Jobs")
+
+df_industries <- df[!duplicated(df$Company), c("Company", "Company.Industry")]
+df_merge <- merge(df_companies, df_industries)
+
+ggplot(
+  head(df_merge[order(-df_merge$Number.of.Jobs), ], 10),
+  aes(
+    x = reorder(Company, -Number.of.Jobs),
+    y = Number.of.Jobs,
+    fill = Company.Industry
+  )
+) +
+  geom_bar(
+    stat = "identity",
+  ) +
+  geom_text(
+    aes(label = Number.of.Jobs),
+    vjust = 1.5,
+    colour = "white"
+  ) +
+  labs(
+    x = "Company",
+    title = "Top 10 companies in number of job offerings"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  custom_theme(
+    title_b_margin = 10,
+    title_size = 14,
+    label_size = 12,
+    font_size = 10
+  )
+```
+
+The company `Deloitte` which is in the `Accounting & Tax` industry has the most job openings. The number almost doubled the second most company `CSIRO` which is a `National Service & Agencies` and the rest are quite close, this is probably because `Accounting & Tax` requires more data scientists as they deal with numbers the most.
+
+Convert `Company Size` and `Company Revenue` to `factor` so they can be manually ordered based on the categories.
+
+```{r, out.width="100%"}
+df$Company.Size <- factor(
+  df$Company.Size,
+  levels = c(
+    "Unknown",
+    "1 to 50 Employees",
+    "51 to 200 Employees",
+    "201 to 500 Employees",
+    "501 to 1000 Employees",
+    "1001 to 5000 Employees",
+    "5001 to 10000 Employees",
+    "10000+ Employees"
+  )
+)
+df$Company.Revenue <- factor(
+  df$Company.Revenue,
+  levels = c(
+    "Unknown / Non-Applicable",
+    "Less than $1 million (USD)",
+    "$1 to $5 million (USD)",
+    "$5 to $10 million (USD)",
+    "$10 to $25 million (USD)",
+    "$25 to $50 million (USD)",
+    "$50 to $100 million (USD)",
+    "$100 to $500 million (USD)",
+    "$500 million to $1 billion (USD)",
+    "$1 to $2 billion (USD)",
+    "$2 to $5 billion (USD)",
+    "$5 to $10 billion (USD)",
+    "$10+ billion (USD)"
+  )
+)
+summary(df[c("Company.Size", "Company.Revenue")])
+```
+
+Let's see if there is a relationship between `Company Size` and `Company Revenue`, plot a stacked bar chart excluding `Unknown` or `NA` options.
+
+```{r}
+ggplot(
+  df[df$Company.Revenue != "Unknown / Non-Applicable" &
+    !duplicated(df$Company), ]
+) +
+  geom_bar(
+    aes(x = Company.Revenue, fill = Company.Size),
+    alpha = 0.5
+  ) +
+  labs(y = "Number of Companies") +
+  theme(
+    axis.text.x = element_text(angle = 75, hjust = 1.05),
+    axis.title = element_text(size = 16)
+  ) +
+  custom_theme(title_x_t_margin = 15, font_size = 10, label_size = 12)
+```
+
+Looks like in general the bigger the company is the higher their revenue is. This can be seen through a couple observations, small companies with fewer than 50 employees only have a revenue less than 25 million, medium sized companies with 501 to 1000 employees have a revenue between 50 million to 2 billion, and most of the large companies with more than 10000 employees have a revenue of over 10 billion.
+
+Another observation that can be made is there are more companies with higher revenue, which is because the bigger the company is the more they want to grow therefore more likely to have open positions.
+
+```{r, fig.width=8}
+ggplot(df[df$Company.Sector != "Unknown", ]) +
+  geom_count(aes(x = Company.Sector, y = Company.Type)) +
+  theme(
+    axis.text.x = element_text(angle = 75, hjust = 1)
+  )
+```
+
+Plotting `Company Type` against `Company Sector`. Some make perfect sense for example all `College / University` are in `Education` and all `Hospital` are in `Healthcare`. Some are more interesting to look at like `Public` and `Private` as we can see they both have a big focus on `Finance` and `Information Technology` while `Public` companies also have an emphasis on `Pharmaceutical & Biotechnology` and `Private` companies are in `Human Resources & Staffing` sector where `Public` companies are not.
+
+## Rating
+```{r, out.width="50%", message=FALSE}
+ggplot(df, aes(x = Company.Rating, y = Estimate.Base.Salary)) +
+  geom_point() +
+  geom_smooth() +
+  custom_theme()
+```
+
+There is a small trend as the higher rating the company receives the higher base salary it pays, but the fitted curve is strongly affected by outliers as there are a lot of 5 star ratings that pay very low salary. This might be due to a portion of people who care more about other things like company culture than money.
+
+```{r, out.width="100%"}
+df_ratings <- df[rating_columns]
+colnames(df_ratings) <- c(
+  "Company\nRating",
+  "Career\nOpportinities",
+  "Compensation\nand\nBenefits",
+  "Culture\nand\nValues",
+  "Senior\nManagement",
+  "Work\nLife\nBalance",
+  "Company\nFriend\nReccomendation"
+)
+pairs(df_ratings)
+```
+
+As suspected all the other criteria seem to be linearly correlated to the `Company Rating`.
+
+## Skill
+```{r, out.width="50%", fig.height=3}
+javascript_r <- ggplot(
+  count(df, javascript_yn, r_yn),
+  aes(x = javascript_yn, y = r_yn),
+) +
+  geom_tile(aes(fill = n)) +
+  coord_equal() +
+  labs(y = "R", x = "JavaScript") +
+  theme(axis.title.y = element_text(angle = 0, vjust = 0.5)) +
+  custom_theme(font_size = 10, label_size = 12)
+
+python_r <- ggplot(
+  count(df, python_yn, r_yn),
+  aes(x = python_yn, y = r_yn),
+) +
+  geom_tile(aes(fill = n)) +
+  coord_equal() +
+  labs(y = "", x = "Python") +
+  custom_theme(font_size = 10, label_size = 12)
+
+grid.arrange(javascript_r, python_r, ncol = 2)
+
+# Count the number of jobs that require JavaScript which also require R
+sum(which(df$javascript_yn) %in% which(df$r_yn))
+```
+
+Not a single job requires both `JavaScript` and `R` but there are a lot of overlaps between `Python` and `R`. There are more jobs that prefer `R` over `JavaScript` but `Python` over `R`.
