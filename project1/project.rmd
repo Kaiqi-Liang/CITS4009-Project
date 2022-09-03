@@ -3,7 +3,7 @@ title: "CITS4009 Computational Data Analysis"
 subtitle: "Project 1 - Exploratory Data Analysis"
 
 graphics: yes
-author: <i>Kaiqi Liang (23344153)</i>
+author: <i>Kaiqi LIANG (23344153)</i>
 date: "Semester 2, 2022"
 
 output:
@@ -32,6 +32,8 @@ df <- read.csv(file = "AustraliaDataScienceJobs.csv", header = TRUE)
 
 # prevent using scientific notation when plotting
 options(scipen = 100)
+# Allow sf package to be installed successfully
+options(timeout = 600)
 
 # Replace empty strings with NA
 df[df == ""] <- NA
