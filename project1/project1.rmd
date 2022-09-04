@@ -11,7 +11,6 @@ output:
     includes:
       before_body: style.html
     number_sections: true
-
 ---
 
 # Introduction
@@ -253,7 +252,7 @@ ggplot(
   geom_bar(
     stat = "identity",
     width = 0.6,
-    fill = "purple"
+    fill = "darkcyan"
   ) +
   geom_text(
     aes(label = Number.of.Jobs),
@@ -311,6 +310,7 @@ ggplot(merge(sf_oz, jobs, all.x = TRUE)) +
     x = "Longitude",
     y = "Latitude"
   ) +
+  scale_fill_gradient(low = "purple", high = "lightpink") +
   custom_theme()
 ```
 
@@ -330,7 +330,7 @@ df_salary <- data.frame(
 ggplot(df_salary) +
   geom_boxplot(
     aes(x = salary, y = amount),
-    fill = "green",
+    fill = "darkorange",
     outlier.colour = "red",
   ) +
   scale_y_continuous(labels = scales::dollar_format()) +
@@ -364,10 +364,16 @@ df_salary[order(-df_salary$Estimate.Base.Salary), ] %>%
 Looks like a couple multi billion dollar companies are, especially `Indeed` who offers multiple highest income jobs which makes sense as they have the revenue to do so. However majority of the jobs still have a starting salary just below 100k as shown by the density plot below.
 
 ```{r, out.width="50%"}
-ggplot(df) +
+ggplot(df, aes(x = Estimate.Base.Salary)) +
+  geom_histogram(
+    aes(y = ..density..),
+    binwidth = 8000,
+    alpha = 0.8,
+    colour = "gray"
+  ) +
   geom_density(
-    aes(x = Estimate.Base.Salary),
-    color = "darkred"
+    colour = "darkred",
+    size = 1
   ) +
   scale_x_continuous(labels = scales::dollar_format()) +
   theme(
@@ -477,12 +483,11 @@ Looks like in general the bigger the company is the higher their revenue is. Thi
 
 Another observation that can be made is there are more companies with higher revenue, which is because the bigger the company is the more they want to grow therefore more likely to have open positions.
 
-```{r, fig.width=8}
+```{r, fig.width=8, fig.height=5.5}
 ggplot(df[df$Company.Sector != "Unknown", ]) +
-  geom_count(aes(x = Company.Sector, y = Company.Type)) +
-  theme(
-    axis.text.x = element_text(angle = 75, hjust = 1)
-  )
+  geom_count(aes(x = Company.Sector, y = Company.Type, colour = ..n..)) +
+  theme(axis.text.x = element_text(angle = 75, hjust = 1)) +
+  scale_color_gradient(low = "brown", high = "magenta")
 ```
 
 Plotting `Company Type` against `Company Sector`. Some make perfect sense for example all `College / University` are in `Education` and all `Hospital` are in `Healthcare`. Some are more interesting to look at like `Public` and `Private` as we can see they both have a big focus on `Finance` and `Information Technology` while `Public` companies also have an emphasis on `Pharmaceutical & Biotechnology` and `Private` companies are in `Human Resources & Staffing` sector where `Public` companies are not.
@@ -490,7 +495,7 @@ Plotting `Company Type` against `Company Sector`. Some make perfect sense for ex
 ## Rating
 ```{r, out.width="50%", message=FALSE}
 ggplot(df, aes(x = Company.Rating, y = Estimate.Base.Salary)) +
-  geom_point() +
+  geom_point(colour = "darkgreen", shape = 23) +
   geom_smooth() +
   scale_y_continuous(labels = scales::dollar_format()) +
   custom_theme()
