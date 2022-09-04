@@ -20,7 +20,7 @@ The dataset for this project is Australia's data science job listings for August
 # Setup
 Load libraries and data.
 
-```{r, message = FALSE}
+```{r, message=FALSE, warning=FALSE}
 library(ggplot2)
 library(WVPlots)
 library(ozmaps)
@@ -30,18 +30,13 @@ library(gridExtra)
 
 df <- read.csv(file = "AustraliaDataScienceJobs.csv", header = TRUE)
 
-# prevent using scientific notation when plotting
-options(scipen = 100)
-# Allow sf package to be installed successfully
-options(timeout = 600)
-
 # Replace empty strings with NA
 df[df == ""] <- NA
 ```
 
 Code to allow truncating text output especially for `str()` and `head()` functions.
 
-```{r class.source = "fold-hide"}
+```{r class.source="fold-hide"}
 # save the built-in output hook
 hook_output <- knitr::knit_hooks$get("output")
 
@@ -60,6 +55,7 @@ knitr::knit_hooks$set(output = function(x, options) {
 ```
 
 Set up a custom theme so all the plots can be standardised as well as having the ability to customise to their needs.
+
 ```{r}
 custom_theme <- function(
   title_y_r_margin = 10,
@@ -82,21 +78,44 @@ custom_theme <- function(
 }
 ```
 
-# Data Cleaning
+# Data Cleaning and Transformation
+## Data Exploratory, Cleaning 
 Use `str()` to have a glance at the data.
 
-```{r, out.lines = 30}
+```{r, out.lines=30}
 str(df)
 ```
 
 There are 2088 observations of 53 variables.
 
-Some columns just have a really long chunk of text `Job Descriptions` and `URL` in particular, which are not that useful so we can drop them entirely.
+## Renaming Variabales
+There is a typo in one of the variable names let's fix that first, and some of them are very verbose which we can simplify.
 
 ```{r}
-df <- df[!names(df) %in% c("Job.Descriptions", "Url")]
+df <- rename(df,
+  Number.of.Rater = Companny.Number.of.Rater,
+  Career.Opportinities = Company.Career.Opportinities,
+  Culture.and.Values = Company.Culture.and.Values,
+  Senior.Management = Company.Senior.Management,
+  Work.Life.Balance = Company.Work.Life.Balance,
+  Friend.Reccomendation = Company.Friend.Reccomendation
+)
 ```
 
+## Dropping Columns
+The variable `Country` should be all `Australia` because this is an Australia's data science jobs dataset, all the job listings should be in Australia, otherwise it is not valid.
+
+```{r}
+any(df$Country != "Australia")
+```
+
+Confirmed that there is no invalid data for the `Country` variable, then it is essentially useless as all the observations are the same, so we should be able to drop it, along with some other columns that are just long chunk of text, `Job Descriptions` and `Url` in particular which are also not that useful to us.
+
+```{r}
+df <- df[!names(df) %in% c("Country", "Job.Descriptions", "Url")]
+```
+
+## Type Conversion
 All the variables that end with `_yn` contain only `1`s and `0`s which should be converted to `logical`.
 
 ```{r}
@@ -108,41 +127,44 @@ df[skill_columns] <- sapply(df[skill_columns], function(col) {
 
 Then inspect the data again using `head()` to look at the first 3 observations.
 
-```{r, out.lines = 33}
+```{r, out.lines=28}
 head(df, 3)
 ```
 
-Looking much cleaner. Now count the missing values in each variable.
+Looking much cleaner now.
+
+## Missing Values
+Count the missing values in each variable.
 
 ```{r}
-count_nas <- function() {
+count_missing <- function() {
   na_counts <- sapply(df, function(col) length(which(is.na(col))))
   na_counts[which(na_counts > 0)]
 }
-count_nas()
+count_missing()
 ```
 
 The 3 jobs that do not even have a `Title` should be dropped.
 
 ```{r}
 df <- df[!is.na(df$Job.Title), ]
-count_nas()
+count_missing()
 ```
 
 The variable `Company Founded` is the year when the company is founded in and `Company CEO Approval` is the percentage of employees who approve their CEO. They both have around 40% of missing values, the first one is probably because the companies did not enter the year founded and the second one might be because the employees are scared to say about their CEO. Due to these reasons they do not have enough useful information to be kept.
 
 ```{r}
 df <- df[!names(df) %in% c("Company.Founded", "Company.CEO.Approval")]
-count_nas()
+count_missing()
 ```
 
 All 3 variables `Company Size`, `Company Type` and `Company Revenue` are missing 180 observations, let's see if they are the same ones.
 
 ```{r}
 summary(cbind(
-  which(is.na(df$Company.Size)),
-  which(is.na(df$Company.Type)),
-  which(is.na(df$Company.Revenue))
+  Company.Size = which(is.na(df$Company.Size)),
+  Company.Type = which(is.na(df$Company.Type)),
+  Company.Revenue = which(is.na(df$Company.Revenue))
 ))
 ```
 
@@ -151,12 +173,12 @@ The missing values in all 3 columns appear to be in the exact same locations. As
 ```{r}
 rating_columns <- c(
   "Company.Rating",
-  "Company.Career.Opportinities",
+  "Career.Opportinities",
   "Compensation.and.Benefits",
-  "Company.Culture.and.Values",
-  "Company.Senior.Management",
-  "Company.Work.Life.Balance",
-  "Company.Friend.Reccomendation"
+  "Culture.and.Values",
+  "Senior.Management",
+  "Work.Life.Balance",
+  "Friend.Reccomendation"
 )
 any(!is.na(df[is.na(df$Company.Size), rating_columns]))
 ```
@@ -165,19 +187,19 @@ Looks like all the 180 jobs are missing the rating data as well, we can just rem
 
 ```{r}
 df <- df[!is.na(df$Company.Size), ]
-count_nas()
+count_missing()
 ```
 
-Now there are still 130 missing values for `Company Rating` and `Company Number of Rater`, again check whether they're from the same observations.
+Now there are still 130 missing values for `Company Rating` and `Number of Rater`, again check whether they're from the same observations.
 
 ```{r}
-any(is.na(df$Company.Rating) != is.na(df$Companny.Number.of.Rater))
+any(is.na(df$Company.Rating) != is.na(df$Number.of.Rater))
 ```
 
-Not a single `NA` in `Company Rating` is different from the ones in `Company Number of Rater` which means they are indeed from the same observations. This makes sense because if the number of rater doesn't exist then there shouldn't be any ratings either, so the missing values in `Company Number of Rater` can be replaced with 0 indicating no one rated and the rating is an approximation based off the mean rating.
+Not a single `NA` in `Company Rating` is different from the ones in `Company Number of Rater` which means they are indeed from the same observations. This makes sense because if the number of rater doesn't exist then there shouldn't be any ratings either, so the missing values in `Number of Rater` can be replaced with 0 indicating no one rated and the rating is an approximation based off the mean rating.
 
 ```{r}
-df$Companny.Number.of.Rater[is.na(df$Companny.Number.of.Rater)] <- 0
+df$Number.of.Rater[is.na(df$Number.of.Rater)] <- 0
 ```
 
 Have a peak at the summary of the rating columns.
@@ -185,7 +207,7 @@ Have a peak at the summary of the rating columns.
 summary(df[rating_columns])
 ```
 
-Since the `Company Rating` is just a number out of 5 we can replace them with the mean value, similarly for `Career Opportinities`, `Compensation and Benefits`, `Company Culture and Values`, `Company Senior Management` and `Work Life Balance`. With regards to `Company Friend Reccomendation`, it is just another rating but out of 100, we can do the same for all of them.
+Since the `Company Rating` is just a number out of 5 we can replace them with the mean value, similarly for `Career Opportinities`, `Compensation and Benefits`, `Culture and Values`, `Senior Management` and `Work Life Balance`. With regards to `Friend Reccomendation`, it is just another rating but out of 100, we can do the same for all of them.
 
 ```{r}
 df[rating_columns] <- sapply(df[rating_columns], function(column) {
@@ -193,7 +215,7 @@ df[rating_columns] <- sapply(df[rating_columns], function(column) {
   column[na] <- mean(!na)
   column
 })
-count_nas()
+count_missing()
 ```
 
 The 2 variables left both have 386 missing values, check one last time if they are from the same observations.
@@ -210,7 +232,7 @@ df[industry_column] <- sapply(df[industry_column], function(column) {
   column[is.na(column)] <- "Unknown"
   column
 })
-count_nas()
+count_missing()
 ```
 
 Finally there are no more missing values.
@@ -241,8 +263,8 @@ ggplot(
     x = "Job Location",
     title = "Locations with the highest number of jobs"
   ) +
-  annotate("text", x = 12, y = 220, label = "This is not a city") +
-  annotate("segment", x = 12, y = 150, xend = 12, yend = 80, arrow = arrow(
+  annotate("text", x = 12, y = 200, label = "This is invalid") +
+  annotate("segment", x = 12, y = 140, xend = 12, yend = 80, arrow = arrow(
     type = "closed", length = unit(0.02, "npc")
   )) +
   coord_flip() +
@@ -254,7 +276,9 @@ ggplot(
   )
 ```
 
-Locations where there are more than 10 number of jobs offered from the highest to the lowest. The 6th location is `Australia` should be changed to `Unknown` as all the other locations are cities other than countries. The reason for this category to appear could either be there are multiple locations in Australia or not sure the exact location.
+The bar chart shows the locations in decreasing order in the number of job openings where there are at least 10.
+
+The 6th location `Australia` should be changed to `Unknown` as all the other locations are cities other than countries. The reason for this category to appear could either be there are multiple locations in Australia or not sure the exact location.
 
 ```{r}
 df$Job.Location[df$Job.Location == "Australia"] <- "Unknown"
@@ -309,6 +333,7 @@ ggplot(df_salary) +
     fill = "green",
     outlier.colour = "red",
   ) +
+  scale_y_continuous(labels = scales::dollar_format()) +
   theme(
     axis.text.x = element_text(vjust = -1),
   ) +
@@ -319,7 +344,7 @@ In job descriptions the salary package is often provided as a range rather than 
 
 As we can see from the box plot there are many outliers with really high starting salary and no outliers on the minimum wage. Since all 3 variables have similar distribution we'll just use the `Estimate Base Salary` for base salaries from now on as it is more reprentative.
 
-Let's find out who the outliers are that offer such high income.
+Let's find out who the outliers are that offer such high base salary.
 
 ```{r}
 df_salary <- df[
@@ -330,10 +355,10 @@ df_salary <- df[
     "Company.Revenue"
   )
 ]
-print(
-  head(df_salary[order(-df_salary$Estimate.Base.Salary), ], 10),
-  row.names = FALSE
-)
+
+df_salary[order(-df_salary$Estimate.Base.Salary), ] %>%
+  head(10) %>%
+  print(row.names = FALSE)
 ```
 
 Looks like a couple multi billion dollar companies are, especially `Indeed` who offers multiple highest income jobs which makes sense as they have the revenue to do so. However majority of the jobs still have a starting salary just below 100k as shown by the density plot below.
@@ -344,6 +369,7 @@ ggplot(df) +
     aes(x = Estimate.Base.Salary),
     color = "darkred"
   ) +
+  scale_x_continuous(labels = scales::dollar_format()) +
   theme(
     axis.text.x = element_text(hjust = 1, vjust = -0.5)
   ) +
@@ -466,6 +492,7 @@ Plotting `Company Type` against `Company Sector`. Some make perfect sense for ex
 ggplot(df, aes(x = Company.Rating, y = Estimate.Base.Salary)) +
   geom_point() +
   geom_smooth() +
+  scale_y_continuous(labels = scales::dollar_format()) +
   custom_theme()
 ```
 
@@ -473,19 +500,14 @@ There is a small trend as the higher rating the company receives the higher base
 
 ```{r, out.width="100%"}
 df_ratings <- df[rating_columns]
-colnames(df_ratings) <- c(
-  "Company\nRating",
-  "Career\nOpportinities",
-  "Compensation\nand\nBenefits",
-  "Culture\nand\nValues",
-  "Senior\nManagement",
-  "Work\nLife\nBalance",
-  "Company\nFriend\nReccomendation"
-)
+
+# Replace dots with newlines so separate words are on different lines to fit in the scatter matrix
+colnames(df_ratings) <- gsub("\\.", "\n", rating_columns)
+
 pairs(df_ratings)
 ```
 
-As suspected all the other criteria seem to be linearly correlated to the `Company Rating`.
+As suspected all the other criteria seem to be linearly correlated to the `Company Rating`, so the overall rating is more closely related to all the criteria than salary, ie. high salary does not necessarily give the company a good rating.
 
 ## Skill
 ```{r, out.width="50%", fig.height=3}
