@@ -361,7 +361,7 @@ df_salary[order(-df_salary$Estimate.Base.Salary), ] %>%
   print(row.names = FALSE)
 ```
 
-Looks like a couple multi billion dollar companies are, especially `Indeed` who offers multiple highest income jobs which makes sense as they have the revenue to do so. However majority of the jobs still have a starting salary just below 100k as shown by the histogram and density plot below.
+Looks like a couple multi billion dollar companies are, especially `Indeed` who offers multiple highest income jobs which makes sense as they have the revenue to do so. However majority of the jobs still have a starting salary of around $100,000 as shown by the histogram and density plot below.
 
 ```{r, out.width="50%"}
 ggplot(df, aes(x = Estimate.Base.Salary)) +
