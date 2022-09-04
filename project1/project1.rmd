@@ -26,6 +26,7 @@ library(ozmaps)
 library(sf)
 library(dplyr)
 library(gridExtra)
+library(knitr)
 
 df <- read.csv(file = "AustraliaDataScienceJobs.csv", header = TRUE)
 
@@ -314,74 +315,8 @@ ggplot(merge(sf_oz, jobs, all.x = TRUE)) +
   custom_theme()
 ```
 
-## Salary
-```{r, out.width="50%"}
-salary_columns <- c("Estimate.Base.Salary", "Low.Estimate", "High.Estimate")
-df_salary <- df[salary_columns]
-df_salary <- data.frame(
-  salary = rep(salary_columns, rep(nrow(df_salary), length(salary_columns))),
-  amount = c(
-    df_salary$Estimate.Base.Salary,
-    df_salary$Low.Estimate,
-    df_salary$High.Estimate
-  )
-)
-
-ggplot(df_salary) +
-  geom_boxplot(
-    aes(x = salary, y = amount),
-    fill = "darkorange",
-    outlier.colour = "red",
-  ) +
-  scale_y_continuous(labels = scales::dollar_format()) +
-  theme(
-    axis.text.x = element_text(vjust = -1),
-  ) +
-  custom_theme(title_x_t_margin = 15)
-```
-
-In job descriptions the salary package is often provided as a range rather than a fixed number as there is room for negotiation, the lower end of the range is `Low Estimate` and the higher end is `High Estimate`, `Estimate Base Salary` is the average of the two.
-
-As we can see from the box plot there are many outliers with really high starting salary and no outliers on the minimum wage. Since all 3 variables have similar distribution we'll just use the `Estimate Base Salary` for base salaries from now on as it is more representative.
-
-Let's find out who the outliers are that offer such high base salary.
-
-```{r}
-df_salary <- df[
-  !duplicated(df$Estimate.Base.Salary),
-  c(
-    "Company",
-    "Estimate.Base.Salary",
-    "Company.Revenue"
-  )
-]
-
-df_salary[order(-df_salary$Estimate.Base.Salary), ] %>%
-  head(10) %>%
-  print(row.names = FALSE)
-```
-
-Looks like a couple multi billion dollar companies are, especially `Indeed` who offers multiple highest income jobs which makes sense as they have the revenue to do so. However majority of the jobs still have a starting salary of around $100,000 as shown by the histogram and density plot below.
-
-```{r, out.width="50%"}
-ggplot(df, aes(x = Estimate.Base.Salary)) +
-  geom_histogram(
-    aes(y = ..density..),
-    binwidth = 8000,
-    alpha = 0.8,
-    colour = "skyblue",
-    fill = "lightblue"
-  ) +
-  geom_density(colour = "darkred") +
-  scale_x_continuous(labels = scales::dollar_format()) +
-  theme(
-    axis.text.x = element_text(hjust = 1, vjust = -0.5)
-  ) +
-  custom_theme(title_y_r_margin = 15, title_x_t_margin = 15)
-```
-
 ## Company
-```{r, out.width="70%"}
+```{r, out.width="65%"}
 df_companies <- as.data.frame(table(df$Company))
 colnames(df_companies) <- c("Company", "Number.of.Jobs")
 
@@ -408,9 +343,7 @@ ggplot(
     x = "Company",
     title = "Top 10 companies in number of job offerings"
   ) +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1)
-  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   custom_theme(
     title_b_margin = 10,
     title_size = 14,
@@ -489,6 +422,82 @@ ggplot(df[df$Company.Sector != "Unknown", ]) +
 ```
 
 Plotting `Company Type` against `Company Sector`. Some make perfect sense for example all `College / University` are in `Education` and all `Hospital` are in `Healthcare`. Some are more interesting to look at like `Public` and `Private` as we can see they both have a big focus on `Finance` and `Information Technology` while `Public` companies also have an emphasis on `Pharmaceutical & Biotechnology` and `Private` companies are in `Human Resources & Staffing` sector where `Public` companies are not.
+
+## Salary
+```{r, out.width="50%"}
+salary_columns <- c("Estimate.Base.Salary", "Low.Estimate", "High.Estimate")
+df_salary <- df[salary_columns]
+df_salary <- data.frame(
+  salary = rep(salary_columns, rep(nrow(df_salary), length(salary_columns))),
+  amount = c(
+    df_salary$Estimate.Base.Salary,
+    df_salary$Low.Estimate,
+    df_salary$High.Estimate
+  )
+)
+
+ggplot(df_salary) +
+  geom_boxplot(
+    aes(x = salary, y = amount),
+    fill = "darkorange",
+    outlier.colour = "red",
+  ) +
+  scale_y_continuous(labels = scales::dollar_format()) +
+  theme(axis.text.x = element_text(vjust = -1)) +
+  custom_theme(title_x_t_margin = 15)
+```
+
+In job descriptions the salary package is often provided as a range rather than a fixed number as there is room for negotiation, the lower end of the range is `Low Estimate` and the higher end is `High Estimate`, `Estimate Base Salary` is the average of the two.
+
+As we can see from the box plot there are many outliers with really high starting salary and no outliers on the minimum wage. Since all 3 variables have similar distribution we'll just use the `Estimate Base Salary` for base salaries from now on as it is more representative.
+
+Let's find out who the outliers are that offer such high base salary.
+
+```{r, message=FALSE, out.width="65%"}
+df_salary <- df[
+  !duplicated(df$Estimate.Base.Salary),
+  c(
+    "Company",
+    "Estimate.Base.Salary",
+    "Company.Revenue"
+  )
+]
+
+df_salary[order(-df_salary$Estimate.Base.Salary), ] %>%
+  head(10) %>%
+  ggplot() +
+    geom_point(aes(
+      x = Company.Revenue,
+      y = Estimate.Base.Salary,
+      colour = Company
+    )) +
+    labs(title = "Top 10 Highest Paying Jobs") +
+    scale_y_continuous(labels = scales::dollar_format()) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    custom_theme(
+      title_b_margin = 10,
+      title_size = 14,
+      label_size = 12,
+      font_size = 10
+    )
+```
+
+Looks like a couple multi billion dollar companies are, especially `Indeed` who offers some of the highest income jobs, which makes sense as they have the revenue to do so. However majority of the jobs still have a starting salary of around $100,000 as shown by the histogram and density plot below.
+
+```{r, out.width="50%"}
+ggplot(df, aes(x = Estimate.Base.Salary)) +
+  geom_histogram(
+    aes(y = ..density..),
+    binwidth = 8000,
+    alpha = 0.8,
+    colour = "skyblue",
+    fill = "lightblue"
+  ) +
+  geom_density(colour = "darkred") +
+  scale_x_continuous(labels = scales::dollar_format()) +
+  theme(axis.text.x = element_text(hjust = 1, vjust = -0.5)) +
+  custom_theme(title_y_r_margin = 15, title_x_t_margin = 15)
+```
 
 ## Rating
 ```{r, out.width="50%", message=FALSE}
