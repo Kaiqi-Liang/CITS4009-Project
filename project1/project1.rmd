@@ -87,17 +87,17 @@ str(df)
 
 There are 2088 observations of 53 variables.
 
-## Renaming Variabales
-There is a typo in one of the variable names let's fix that first, and some of them are very verbose which we can simplify.
+## Renaming Variables
+There are a couple typos in the variable names let's fix that first, and some of them are very verbose which we can simplify.
 
 ```{r}
 df <- rename(df,
   Number.of.Rater = Companny.Number.of.Rater,
-  Career.Opportinities = Company.Career.Opportinities,
+  Career.Opportunities = Company.Career.Opportinities,
   Culture.and.Values = Company.Culture.and.Values,
   Senior.Management = Company.Senior.Management,
   Work.Life.Balance = Company.Work.Life.Balance,
-  Friend.Reccomendation = Company.Friend.Reccomendation
+  Friend.Recommendation = Company.Friend.Reccomendation
 )
 ```
 
@@ -172,12 +172,12 @@ The missing values in all 3 columns appear to be in the exact same locations. As
 ```{r}
 rating_columns <- c(
   "Company.Rating",
-  "Career.Opportinities",
+  "Career.Opportunities",
   "Compensation.and.Benefits",
   "Culture.and.Values",
   "Senior.Management",
   "Work.Life.Balance",
-  "Friend.Reccomendation"
+  "Friend.Recommendation"
 )
 any(!is.na(df[is.na(df$Company.Size), rating_columns]))
 ```
@@ -206,7 +206,7 @@ Have a peak at the summary of the rating columns.
 summary(df[rating_columns])
 ```
 
-Since the `Company Rating` is just a number out of 5 we can replace them with the mean value, similarly for `Career Opportinities`, `Compensation and Benefits`, `Culture and Values`, `Senior Management` and `Work Life Balance`. With regards to `Friend Reccomendation`, it is just another rating but out of 100, we can do the same for all of them.
+Since the `Company Rating` is just a number out of 5 we can replace them with the mean value, similarly for `Career Opportunities`, `Compensation and Benefits`, `Culture and Values`, `Senior Management` and `Work Life Balance`. With regards to `Friend Recommendation`, it is just another rating but out of 100, we can do the same for all of them.
 
 ```{r}
 df[rating_columns] <- sapply(df[rating_columns], function(column) {
@@ -342,7 +342,7 @@ ggplot(df_salary) +
 
 In job descriptions the salary package is often provided as a range rather than a fixed number as there is room for negotiation, the lower end of the range is `Low Estimate` and the higher end is `High Estimate`, `Estimate Base Salary` is the average of the two.
 
-As we can see from the box plot there are many outliers with really high starting salary and no outliers on the minimum wage. Since all 3 variables have similar distribution we'll just use the `Estimate Base Salary` for base salaries from now on as it is more reprentative.
+As we can see from the box plot there are many outliers with really high starting salary and no outliers on the minimum wage. Since all 3 variables have similar distribution we'll just use the `Estimate Base Salary` for base salaries from now on as it is more representative.
 
 Let's find out who the outliers are that offer such high base salary.
 
@@ -361,7 +361,7 @@ df_salary[order(-df_salary$Estimate.Base.Salary), ] %>%
   print(row.names = FALSE)
 ```
 
-Looks like a couple multi billion dollar companies are, especially `Indeed` who offers multiple highest income jobs which makes sense as they have the revenue to do so. However majority of the jobs still have a starting salary just below 100k as shown by the density plot below.
+Looks like a couple multi billion dollar companies are, especially `Indeed` who offers multiple highest income jobs which makes sense as they have the revenue to do so. However majority of the jobs still have a starting salary just below 100k as shown by the histogram and density plot below.
 
 ```{r, out.width="50%"}
 ggplot(df, aes(x = Estimate.Base.Salary)) +
@@ -369,12 +369,10 @@ ggplot(df, aes(x = Estimate.Base.Salary)) +
     aes(y = ..density..),
     binwidth = 8000,
     alpha = 0.8,
-    colour = "gray"
+    colour = "skyblue",
+    fill = "lightblue"
   ) +
-  geom_density(
-    colour = "darkred",
-    size = 1
-  ) +
+  geom_density(colour = "darkred") +
   scale_x_continuous(labels = scales::dollar_format()) +
   theme(
     axis.text.x = element_text(hjust = 1, vjust = -0.5)
