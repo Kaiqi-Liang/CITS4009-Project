@@ -425,25 +425,17 @@ Plotting `Company Type` against `Company Sector`. Some make perfect sense for ex
 
 ## Salary
 ```{r, out.width="50%"}
-salary_columns <- c("Estimate.Base.Salary", "Low.Estimate", "High.Estimate")
-df_salary <- df[salary_columns]
-df_salary <- data.frame(
-  salary = rep(salary_columns, rep(nrow(df_salary), length(salary_columns))),
-  amount = c(
-    df_salary$Estimate.Base.Salary,
-    df_salary$Low.Estimate,
-    df_salary$High.Estimate
-  )
-)
+salary_columns <- c("High.Estimate", "Estimate.Base.Salary", "Low.Estimate")
+df_salary <- stack(df[salary_columns])
+colnames(df_salary) <- c("amount", "salary")
 
 ggplot(df_salary) +
   geom_boxplot(
-    aes(x = salary, y = amount),
-    fill = "darkorange",
-    outlier.colour = "red",
+    aes(x = salary, y = amount, fill = salary),
+    outlier.colour = "red"
   ) +
   scale_y_continuous(labels = scales::dollar_format()) +
-  theme(axis.text.x = element_text(vjust = -1)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   custom_theme(title_x_t_margin = 15)
 ```
 
