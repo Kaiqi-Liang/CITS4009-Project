@@ -1,0 +1,15 @@
+---
+title: "CITS4009 Computational Data Analysis"
+subtitle: "Project 2 - Modelling"
+
+graphics: yes
+author: <i>Kaiqi LIANG (23344153)</i>
+author: <i>Briana (23344153)</i>
+date: "Semester 2, 2022"
+
+output:
+  html_document:
+    includes:
+      before_body: style.html
+    number_sections: true
+---
