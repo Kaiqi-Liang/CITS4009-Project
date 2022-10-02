@@ -3,8 +3,7 @@ title: "CITS4009 Computational Data Analysis"
 subtitle: "Project 2 - Modelling"
 
 graphics: yes
-author: <i>Kaiqi LIANG (23344153)</i>
-author: <i>Briana DAVIES-MORRELL (22734723)</i>
+author: <i>Kaiqi LIANG (23344153) - Briana DAVIES-MORRELL (22734723)</i>
 date: "Semester 2, 2022"
 
 output:
@@ -13,3 +12,57 @@ output:
       before_body: style.html
     number_sections: true
 ---
+
+```{r, message=FALSE}
+library(dplyr)
+
+df <- read.csv(file = "AustraliaDataScienceJobs.csv", header = TRUE)
+```
+
+```{r, echo=FALSE}
+df[df == ""] <- NA
+
+df <- rename(df,
+  Number.of.Rater = Companny.Number.of.Rater,
+  Career.Opportunities = Company.Career.Opportinities,
+  Culture.and.Values = Company.Culture.and.Values,
+  Senior.Management = Company.Senior.Management,
+  Work.Life.Balance = Company.Work.Life.Balance,
+  Friend.Recommendation = Company.Friend.Reccomendation
+)
+
+# Drop columns
+df <- df[!names(df) %in% c(
+    "Country",
+    "Job.Descriptions",
+    "Url",
+    "Company.Founded",
+    "Company.CEO.Approval"
+)]
+
+# Drop rows that contain NAs in either Job Title or Company Size
+df <- df[!is.na(df$Job.Title) & !is.na(df$Company.Size), ]
+
+# Convert _yn columns to logical
+skill_columns <- grep("_yn", names(df))
+df[skill_columns] <- sapply(df[skill_columns], function(col) {
+  as.logical(col)
+})
+
+# Convert NAs to Unknown in Company Sector and Company Industry
+industry_column <- c("Company.Sector", "Company.Industry")
+df[industry_column] <- sapply(df[industry_column], function(column) {
+  column[is.na(column)] <- "Unknown"
+  column
+})
+
+count_missing <- function() {
+  na_counts <- sapply(df, function(col) length(which(is.na(col))))
+  na_counts[which(na_counts > 0)]
+}
+count_missing()
+```
+
+```{r}
+str(df)
+```
