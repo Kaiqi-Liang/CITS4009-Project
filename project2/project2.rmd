@@ -15,6 +15,7 @@ output:
 
 ```{r, message=FALSE}
 library(dplyr)
+set.seed(42)
 
 df <- read.csv(file = "AustraliaDataScienceJobs.csv", header = TRUE)
 ```
@@ -37,7 +38,8 @@ df <- df[!names(df) %in% c(
     "Job.Descriptions",
     "Url",
     "Company.Founded",
-    "Company.CEO.Approval"
+    "Company.CEO.Approval",
+    "Number.of.Rater"
 )]
 
 # Drop rows that contain NAs in either Job Title or Company Size
@@ -56,11 +58,21 @@ df[industry_column] <- sapply(df[industry_column], function(column) {
   column
 })
 
-count_missing <- function() {
-  na_counts <- sapply(df, function(col) length(which(is.na(col))))
-  na_counts[which(na_counts > 0)]
-}
-count_missing()
+# Impute NAs with median values in the rating columns
+rating_columns <- c(
+  "Company.Rating",
+  "Career.Opportunities",
+  "Compensation.and.Benefits",
+  "Culture.and.Values",
+  "Senior.Management",
+  "Work.Life.Balance",
+  "Friend.Recommendation"
+)
+df[rating_columns] <- sapply(df[rating_columns], function(column) {
+  na <- is.na(column)
+  column[na] <- median(!na)
+  column
+})
 ```
 
 ```{r}
