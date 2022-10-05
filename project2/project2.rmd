@@ -164,19 +164,19 @@ company_pred <- single_variable_prediction(
 )
 ```
 
-```{r, fig.width=10}
+```{r, fig.width=10, fig.height=3}
 double_density_plot <- function(
   pred_col,
-  ground_truth,
-  title,
+  output_col,
+  x,
   y
 ) {
   ggplot(data.frame(
     pred = pred_col,
-    truth = ground_truth
+    High.Income = output_col
   )) +
-    geom_density(aes(x = pred, colour = truth)) +
-    labs(y = y, title = title)
+    geom_density(aes(x = pred, colour = High.Income)) +
+    labs(x = x, y = y)
 }
 grid.arrange(
   double_density_plot(
@@ -195,7 +195,7 @@ grid.arrange(
 )
 ```
 
-```{r}
+```{r, out.width="50%"}
 roc_plot <- function(pred_col, out_col, colour_id = 2, overlaid = FALSE) {
   par(new = overlaid)
   plot(
