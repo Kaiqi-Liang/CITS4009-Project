@@ -16,6 +16,9 @@ output:
 ```{r, message=FALSE}
 library(dplyr)
 library(ROCR)
+library(ggplot2)
+library(gridExtra)
+library(ROCit)
 
 df <- read.csv(file = "AustraliaDataScienceJobs.csv", header = TRUE)
 ```
@@ -91,7 +94,7 @@ Train test split.
 ```{r}
 split <- runif(nrow(df))
 test <- df[split >= 0.9, ]
-train_all <- df[split < 0.9, ]
+train <- df[split < 0.9, ]
 ```
 
 # Null model
@@ -103,10 +106,10 @@ null_model <- sum(df$High.Income) / nrow(df)
 ```{r}
 variables <- setdiff(colnames(df), "High.Income")
 categorical_variables <- variables[
-  sapply(train_all[, variables], class) %in% c("factor", "character", "logical")
+  sapply(train[, variables], class) %in% c("factor", "character", "logical")
 ]
 numeric_variables <- variables[
-  sapply(train_all[, variables], class) %in% "numeric"
+  sapply(train[, variables], class) %in% "numeric"
 ]
 ```
 
@@ -131,19 +134,77 @@ calc_auc <- function(pred_col, out_col) {
 for (variable in categorical_variables) {
   aucs <- rep(0, 100)
   for (i in seq(aucs)) {
-    split <- runif(nrow(train_all))
-    calibration <- train_all[split >= 0.9, ]
-    train <- train_all[split < 0.9, ]
+    split <- rbinom(n = nrow(train), size = 1, prob = 0.1) == 1
     pred_col <- single_variable_prediction(
-      train[, variable],
-      train$High.Income,
-      calibration[, variable]
+      train[split, variable],
+      train[split, "High.Income"],
+      train[!split, variable]
     )
-    aucs[i] <- calc_auc(pred_col, calibration$High.Income)
+    aucs[i] <- calc_auc(pred_col, train[!split, "High.Income"])
   }
   mean_auc <- mean(aucs)
   if (mean_auc > 0.7) {
     print(sprintf("%s: %4.3f", variable, mean_auc))
   }
 }
+```
+
+Pick the top 2 highest average AUC.
+
+```{r}
+title_pred <- single_variable_prediction(
+  train$Job.Title,
+  train$High.Income,
+  test$Job.Title
+)
+company_pred <- single_variable_prediction(
+  train$Company,
+  train$High.Income,
+  test$Company
+)
+```
+
+```{r, fig.width=10}
+double_density_plot <- function(
+  pred_col,
+  ground_truth,
+  title,
+  y
+) {
+  ggplot(data.frame(
+    pred = pred_col,
+    truth = ground_truth
+  )) +
+    geom_density(aes(x = pred, colour = truth)) +
+    labs(y = y, title = title)
+}
+grid.arrange(
+  double_density_plot(
+    title_pred,
+    test$High.Income,
+    "Job Title",
+    "density"
+  ),
+  double_density_plot(
+    company_pred,
+    test$High.Income,
+    "Company",
+    ""
+  ),
+  ncol = 2
+)
+```
+
+```{r}
+roc_plot <- function(pred_col, out_col, colour_id = 2, overlaid = FALSE) {
+  par(new = overlaid)
+  plot(
+    rocit(score = pred_col, class = out_col),
+    col = c(colour_id, 1),
+    legend = FALSE,
+    YIndex = FALSE
+  )
+}
+roc_plot(title_pred, test$High.Income)
+roc_plot(company_pred, test$High.Income, 3, TRUE)
 ```
