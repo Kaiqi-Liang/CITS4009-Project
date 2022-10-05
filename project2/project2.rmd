@@ -15,12 +15,22 @@ output:
 
 # Data Preparation
 
+```{r}
+# Clean and set workspace 
+rm(list = ls())
+if (!is.null(sessionInfo()$otherPkgs)) {
+  invisible(
+    lapply(paste0('package:', names(sessionInfo()$otherPkgs)),
+           detach, character.only=TRUE, unload=TRUE))}
+```
+
 ```{r, message=FALSE}
 library(dplyr)
 library(ROCR)
 library(ggplot2)
 library(gridExtra)
 library(ROCit)
+library(caret)
 
 df <- read.csv(file = "AustraliaDataScienceJobs.csv", header = TRUE)
 ```
@@ -219,3 +229,82 @@ roc_plot(company_pred, test$High.Income, 3, TRUE)
 ## Naive Bayes
 
 ## Logistic Regression
+
+Create formula for logistic regression.
+
+```{r}
+
+predictor = "High.Income"
+features = colnames(df)[colnames(df) != "High.Income"]
+
+fmla <- paste(predictor, paste(features, collapse=" + "), sep=" ~ ")
+cat(fmla)
+
+```
+
+Fit the logistic regression model
+
+```{r}
+
+model <- glm(fmla, data=train, family=binomial(link="logit"))
+
+summary(model)
+```
+
+Make predictions. Return the probabilities of the predictor
+
+```{r}
+
+train$pred <- predict(model, newdata=train, type="response")
+test$pred <- predict(model, newdata=test, type="response")
+
+```
+Ran into a problem. Job.Title has some unique instances, e.g. Animal Health Advisor. Thus, it is possible for the trained model to miss these (if they were randomly assigned into test). We cannot predict for which we have no data.
+
+For now try removing these cases. This is almost definitely wrong. Need to fix cause the graphs look wacky.
+
+```{r}
+test_modified <- test
+test_modified$Job.Title[which(!(test_modified$Job.Title %in% unique(train$Job.Title)))] <- NA  # Replace new levels by NA
+test_modified$Job.Location[which(!(test_modified$Job.Location %in% unique(train$Job.Location)))] <- NA  # Replace new levels by NA
+test_modified$Company[which(!(test_modified$Company %in% unique(train$Company)))] <- NA  # Replace new levels by NA
+test_modified$Company.Industry[which(!(test_modified$Company.Industry %in% unique(train$Company.Industry)))] <- NA  # Replace new levels by NA
+
+```
+
+```{r}
+
+train$pred <- predict(model, newdata=train, type="response")
+test$pred <- predict(model, newdata=test_modified, type="response")
+
+```
+
+```{r}
+
+ggplot(train, aes(x=pred, color=High.Income, linetype=High.Income)) + geom_density(size=1.5) +theme(text=element_text(size=20))
+
+```
+
+```{r}
+
+perf <- prediction(train$pred, train$High.Income)
+precObj <- performance(perf, measure="prec")
+recObj <- performance(perf, measure="rec")
+thresh <- (precObj@x.values)[[1]] # threshold
+precision <- (precObj@y.values)[[1]] # precision
+recall <- (recObj@y.values)[[1]] # recall
+ROCdf <- data.frame(threshold=thresh, precision=precision, recall=recall)
+
+# Null 
+pnull <- mean(as.numeric(train$High.Income))
+
+```
+
+```{r}
+p1 <- ggplot(ROCdf, aes(x=threshold)) + geom_line(aes(y=precision/pnull)) +
+coord_cartesian(xlim = c(0,0.05), ylim=c(0,5) ) + labs(y="Enrichment rate")
+p2 <- ggplot(ROCdf, aes(x=threshold)) + geom_line(aes(y=recall)) +
+coord_cartesian(xlim = c(0,0.05))
+grid.arrange(p1, p2, nrow = 2)
+```
+
