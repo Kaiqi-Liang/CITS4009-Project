@@ -13,6 +13,8 @@ output:
     number_sections: true
 ---
 
+# Setup
+
 ```{r, message=FALSE}
 library(dplyr)
 library(ROCR)
@@ -78,7 +80,7 @@ df[rating_columns] <- sapply(df[rating_columns], function(column) {
 })
 ```
 
-Create target column.
+Create target column by splitting a numerical variable into 2 categories using the median.
 
 ```{r}
 df$High.Income <- df$Estimate.Base.Salary >= median(df$Estimate.Base.Salary)
@@ -89,7 +91,7 @@ df <- df[!names(df) %in% c(
 )]
 ```
 
-Train test split.
+Perform a 90/10 random split on the dataset to get a training and test set.
 
 ```{r}
 split <- runif(nrow(df))
@@ -99,7 +101,16 @@ train <- df[split < 0.9, ]
 
 # Null model
 ```{r}
-null_model <- sum(df$High.Income) / nrow(df)
+calc_auc <- function(pred_col, out_col) {
+  as.numeric(performance(prediction(pred_col, out_col), "auc")@y.values)
+}
+```
+
+As it is a balanced dataset the null model will have a 50% chance of predicting `TRUE` which results in an AUC of 0.5.
+
+```{r}
+null_model <- sum(train$High.Income) / nrow(train)
+calc_auc(rep(null_model, nrow(test)), test$High.Income)
 ```
 
 # Single Variable Model
@@ -122,12 +133,6 @@ single_variable_prediction <- function(feature_col, output_col, test_col) {
 }
 ```
 
-```{r}
-calc_auc <- function(pred_col, out_col) {
-  as.numeric(performance(prediction(pred_col, out_col), "auc")@y.values)
-}
-```
-
 100-fold cross-validation.
 
 ```{r}
@@ -143,7 +148,7 @@ for (variable in categorical_variables) {
     aucs[i] <- calc_auc(pred_col, train[!split, "High.Income"])
   }
   mean_auc <- mean(aucs)
-  if (mean_auc > 0.7) {
+  if (mean_auc > 0.65) {
     print(sprintf("%s: %4.3f", variable, mean_auc))
   }
 }
