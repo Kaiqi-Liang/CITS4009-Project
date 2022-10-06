@@ -314,19 +314,6 @@ train %>% select(pred, High.Income)
 
 ```
 
-Ran into a problem. Job.Title has some unique instances, e.g. Animal Health Advisor. Thus, it is possible for the trained model to miss these (if they were randomly assigned into test). We cannot predict for which we have no data.
-
-For now try removing these cases. This is almost definitely wrong. Need to fix cause the graphs look wacky.
-
-```{r}
-test_modified <- test
-test_modified$Job.Title[which(!(test_modified$Job.Title %in% unique(train$Job.Title)))] <- NA  # Replace new levels by NA
-test_modified$Job.Location[which(!(test_modified$Job.Location %in% unique(train$Job.Location)))] <- NA  # Replace new levels by NA
-test_modified$Company[which(!(test_modified$Company %in% unique(train$Company)))] <- NA  # Replace new levels by NA
-test_modified$Company.Industry[which(!(test_modified$Company.Industry %in% unique(train$Company.Industry)))] <- NA  # Replace new levels by NA
-
-```
-
 
 ```{r}
 
@@ -356,11 +343,38 @@ p2 <- ggplot(ROCdf, aes(x=threshold)) + geom_line(aes(y=recall)) +
 coord_cartesian(xlim = c(0,1))
 grid.arrange(p1, p2, nrow = 2)
 ```
+For test set 
+
+Ran into a problem. Job.Title has some unique instances, e.g. Animal Health Advisor. Thus, it is possible for the trained model to miss these (if they were randomly assigned into test). We cannot predict for which we have no data.
+
+For now try removing these cases. This is almost definitely wrong. Need to fix cause the graphs look wacky.
+
+```{r}
+test_modified <- test
+test_modified$Job.Title[which(!(test_modified$Job.Title %in% unique(train$Job.Title)))] <- NA  # Replace new levels by NA
+test_modified$Job.Location[which(!(test_modified$Job.Location %in% unique(train$Job.Location)))] <- NA  # Replace new levels by NA
+test_modified$Company[which(!(test_modified$Company %in% unique(train$Company)))] <- NA  # Replace new levels by NA
+test_modified$Company.Industry[which(!(test_modified$Company.Industry %in% unique(train$Company.Industry)))] <- NA  # Replace new levels by NA
+
+```
+
+```{r}
+
+test$pred <- predict(model, newdata = test_modified, type="response")
+
+ggplot(test, aes(x = pred)) +
+  geom_histogram(aes(color = High.Income, fill = High.Income), position = "identity", bins = 50, alpha = 0.4) + 
+  ggtitle('Probability of Predicting the Observation is High.Income') + 
+  xlab('Probability')
+
+test_modified %>% select(pred, High.Income)
+
+```
 ```{r}
 cat("Confusion matrix of 'High.Income' predictions:\n")
 
 ## Confusion matrix of 'High.Income' predictions:
-confusion.test <- table(actual=test$High.Income, predicted=test$pred>0.02)
+confusion.test <- table(actual=test$High.Income, predicted=test$pred>0.05)
 confusion.test
 
 precision <- confusion.test[2,2] / sum(confusion.test[,2]) # TP / (TP+FP)
@@ -372,5 +386,6 @@ enrich <- precision / mean(as.numeric(test$High.Income))
 print(paste("The precision is", as.character(precision), ". The recall is", as.character(recall), "and the enrichment rate is", as.character(enrich), sep = " "))
 
 ```
+
 
 # Part 2: Clustering 
