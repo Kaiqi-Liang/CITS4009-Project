@@ -7,11 +7,14 @@ author: <i>Kaiqi LIANG (23344153) - Briana DAVIES-MORRELL (22734723)</i>
 date: "Semester 2, 2022"
 
 output:
-  html_document:
+  html_document: html_notebook
     includes:
       before_body: style.html
     number_sections: true
 ---
+
+# Data Preparation
+
 
 # Data Preparation
 
