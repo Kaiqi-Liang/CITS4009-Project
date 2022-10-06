@@ -26,11 +26,13 @@ if (!is.null(sessionInfo()$otherPkgs)) {
            detach, character.only=TRUE, unload=TRUE))}
 ```
 
-Load libraries and dataset as df 
+Load libraries and dataset as df.
+
 ```{r, message=FALSE}
 library(dplyr)
 library(ROCR)
 library(ggplot2)
+library(grid)
 library(gridExtra)
 library(ROCit)
 library(caret)
@@ -135,16 +137,17 @@ Identify the numerical and categorical feature variables:
 
 ```{r}
 
-vars <- setdiff(colnames(df), "High.Income")
+target = "High.Income"
+features <- setdiff(colnames(df), target)
 
-cat_var <- vars[
-  sapply(df[, vars], class) %in% c("factor", "character", "logical")
+cat_features <- features[
+  sapply(df[, features], class) %in% c("factor", "character", "logical")
 ]
-num_var <- vars[
-  sapply(df[, vars], class) %in% "numeric"
+num_features <- features[
+  sapply(df[, features], class) %in% "numeric"
 ]
 
-print(paste("There are", as.character(length(cat_var)), "categorical features,", as.character(length(num_var)), "numerical features, and 1 target.", sep = " "))
+print(paste("There are", as.character(length(cat_features)), "categorical features,", as.character(length(num_features)), "numerical features, and 1 target.", sep = " "))
 
 ```
 
@@ -163,7 +166,9 @@ print(paste("The training set has", as.character(nrow(train)), "observations, an
 
 ## Null model
 
-Firstly, we will compute a null model.
+Firstly, we will compute a null model. The null model will always return the the majority category. As mentioned earlier, the dataset is almost balanced so the model will have a 50% chance of predicting High.Income (`TRUE`), resulting in an Area Under the Curve (AUC) of 0.5. 
+
+Calc_auc is a formula that calculates the AUC of a model based on the predictor and target. 
 
 ```{r}
 calc_auc <- function(pred_col, out_col) {
@@ -171,8 +176,7 @@ calc_auc <- function(pred_col, out_col) {
 }
 ```
 
-As it is a balanced dataset the null model will have a 50% chance of predicting `TRUE` which results in an AUC of 0.5.
-
+Apply the 
 ```{r}
 null_model <- sum(train$High.Income) / nrow(train)
 calc_auc(rep(null_model, nrow(test)), test$High.Income)
@@ -192,7 +196,8 @@ single_variable_prediction <- function(feature_col, output_col, test_col) {
 100-fold cross-validation.
 
 ```{r}
-for (variable in categorical_variables) {
+# loop through all categorical features 
+for (variable in cat_features) {
   aucs <- rep(0, 100)
   for (i in seq(aucs)) {
     split <- rbinom(n = nrow(train), size = 1, prob = 0.1) == 1
@@ -274,35 +279,41 @@ roc_plot(company_pred, test$High.Income, 3, TRUE)
 
 ## Logistic Regression
 
-Create formula for logistic regression.
+Logistic regression can be used to classify a variable dependent on one or more independent features. LR will find the best fitting model to describe the relationship between the dependent and the independent variables. We will be using binomial type LR, as the target variable can only have two possible types - High.Income or not. 
 
+Firstly, create the formula for logistic regression and fit the model
 ```{r}
 
-predictor = "High.Income"
-features = colnames(df)[colnames(df) != "High.Income"]
+# fmla <- paste(target, paste(features, collapse=" + "), sep=" ~ ")
+# cat(fmla)
 
-fmla <- paste(predictor, paste(features, collapse=" + "), sep=" ~ ")
-cat(fmla)
+model <- glm(High.Income~., data=train, family=binomial(link="logit"))
+# summary(model)
 
 ```
 
-Fit the logistic regression model
-
 ```{r}
-
-model <- glm(fmla, data=train, family=binomial(link="logit"))
-
 summary(model)
 ```
 
-Make predictions. Return the probabilities of the predictor
+Next use the model to make predictions on the training and test set. 
 
+The predict function gives the probability that the observation has a response of 1 - i.e. is a High.Income observations. 
+
+Overlaying these probabilities reveal that the model has a 100% chance of predicting 1 for High.Income observations and 0 for Low.Income observations.
 ```{r}
 
-train$pred <- predict(model, newdata=train, type="response")
-test$pred <- predict(model, newdata=test, type="response")
+train$pred <- predict(model, data = train, type="response")
+
+ggplot(train, aes(x = pred)) +
+  geom_histogram(aes(color = High.Income, fill = High.Income), position = "identity", bins = 50, alpha = 0.4) + 
+  ggtitle('Probability of Predicting the Observation is High.Income') + 
+  xlab('Probability')
+
+train %>% select(pred, High.Income)
 
 ```
+
 Ran into a problem. Job.Title has some unique instances, e.g. Animal Health Advisor. Thus, it is possible for the trained model to miss these (if they were randomly assigned into test). We cannot predict for which we have no data.
 
 For now try removing these cases. This is almost definitely wrong. Need to fix cause the graphs look wacky.
@@ -316,33 +327,27 @@ test_modified$Company.Industry[which(!(test_modified$Company.Industry %in% uniqu
 
 ```
 
-```{r}
-
-train$pred <- predict(model, newdata=train, type="response")
-test$pred <- predict(model, newdata=test_modified, type="response")
-
-```
 
 ```{r}
 
-ggplot(train, aes(x=pred, color=High.Income, linetype=High.Income)) + geom_density(size=1.5) +theme(text=element_text(size=20))
+# Prediction, precision, and recall objects
+prediction_obj <- prediction(train$pred, train$High.Income)
+precision_obj <- performance(perf, measure="prec")
+recall_obj <- performance(perf, measure="rec")
 
-```
+thresh <- (precision_obj@x.values)[[1]] # threshold
+precision <- (precision_obj@y.values)[[1]] # precision
+recall <- (recall_obj@y.values)[[1]] # recall
 
-```{r}
-
-perf <- prediction(train$pred, train$High.Income)
-precObj <- performance(perf, measure="prec")
-recObj <- performance(perf, measure="rec")
-thresh <- (precObj@x.values)[[1]] # threshold
-precision <- (precObj@y.values)[[1]] # precision
-recall <- (recObj@y.values)[[1]] # recall
 ROCdf <- data.frame(threshold=thresh, precision=precision, recall=recall)
+ROCdf
 
-# Null 
+# Null Probability 
 pnull <- mean(as.numeric(train$High.Income))
-
+cat('pnull=', pnull)
 ```
+
+Plot the enrichment rate (the ratio of precision to the average rate of positives) and recall versus the threshold value
 
 ```{r}
 p1 <- ggplot(ROCdf, aes(x=threshold)) + geom_line(aes(y=precision/pnull)) +
@@ -351,4 +356,21 @@ p2 <- ggplot(ROCdf, aes(x=threshold)) + geom_line(aes(y=recall)) +
 coord_cartesian(xlim = c(0,0.05))
 grid.arrange(p1, p2, nrow = 2)
 ```
+```{r}
+cat("Confusion matrix of 'High.Income' predictions:\n")
 
+## Confusion matrix of 'High.Income' predictions:
+confusion.test <- table(actual=test$High.Income, predicted=test$pred>0.02)
+confusion.test
+
+precision <- confusion.test[2,2] / sum(confusion.test[,2]) # TP / (TP+FP)
+
+recall <- confusion.test[2,2] / sum(confusion.test[2,]) # TP / (TP+FN)
+
+enrich <- precision / mean(as.numeric(test$High.Income))
+
+print(paste("The precision is", as.character(precision), ". The recall is", as.character(recall), "and the enrichment rate is", as.character(enrich), sep = " "))
+
+```
+
+# Part 2: Clustering 
