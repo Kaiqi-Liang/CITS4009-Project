@@ -13,13 +13,12 @@ output:
     number_sections: true
 ---
 
-# Data Preparation
+# Introduction
 
+The dataset chosen is the Australia's Data Science Job Listings for August 2022, which can be downloaded from [Kaggle](https://www.kaggle.com/datasets/nadzmiagthomas/australia-data-science-jobs). It was scrapped from [Glassdoor](https://www.glassdoor.com.au) which is a website where current and former employees anonymously review companies.
 
-# Data Preparation
-
+Clean and set workspace
 ```{r}
-# Clean and set workspace 
 rm(list = ls())
 if (!is.null(sessionInfo()$otherPkgs)) {
   invisible(
@@ -27,6 +26,7 @@ if (!is.null(sessionInfo()$otherPkgs)) {
            detach, character.only=TRUE, unload=TRUE))}
 ```
 
+Load libraries and dataset as df 
 ```{r, message=FALSE}
 library(dplyr)
 library(ROCR)
@@ -37,6 +37,10 @@ library(caret)
 
 df <- read.csv(file = "AustraliaDataScienceJobs.csv", header = TRUE)
 ```
+
+# Data Preparation
+
+Firstly, clean the dataset and remove or impute missing values. This is the same process as undertaken in Project 1 and is resultingly not explained here. 
 
 ```{r, echo=FALSE}
 df[df == ""] <- NA
@@ -51,6 +55,11 @@ df <- rename(df,
 )
 
 # Drop columns
+# Country is also Aus so not a valuable variable
+# Job Descriptions and URL are text based and outside the scope of this unit 
+# Company.Founded is dependent on Company, doesn't provide any new information for the classification model
+# Company.CEO.Approval has too many missing values
+# Number.of.Rater is the number of people in the company who rated - not a valuable variab;e 
 df <- df[!names(df) %in% c(
     "Country",
     "Job.Descriptions",
@@ -93,7 +102,19 @@ df[rating_columns] <- sapply(df[rating_columns], function(column) {
 })
 ```
 
-Create target column by splitting a numerical variable into 2 categories using the median.
+# Part 1: Classification
+
+## Target Variable
+
+Sometimes job postings don't include the salary. A classification model that predicts the salary range of future job postings, based on past postings with salary information, would be incredibly useful for job hunters who don't want to waste time applying for unsuitable jobs. As such, the response variable we have chosen is the income level of the job posting. The original dataset included three numeric salary variables: High.Estimate, Estimate.Base.Salary, and Low.Estimate. Focusing on the Estimate.Base.Salary this can be a binary classification problem of two classes: High.Income and Low.Income. We have taken the cutoff between these two classes to be the median of the Estimate.Base.Salary, \$95,000. Low.Income is a salary between \$0 - \$95,000 and is assigned a label of 0. High.Income is a salary between \$95,000 - \$Inf and is assigned a label of 1. Since the cutoff is based on the median, the dataset is almost balanced, with 955 High.Income observations and 950 Low.Income observations. 
+
+```{r}
+n.high = nrow(df %>% filter(Estimate.Base.Salary >= 95000))
+n.low = nrow(df %>% filter(Estimate.Base.Salary < 95000))
+print(paste("There are", as.character(n.high), "high income observations.", "There are", as.character(n.low), "low income observations", sep = " "))
+```
+
+Create the "target" column High.Income by splitting the Estimate.Base.Salary at the median value of \$95,000. As we are approaching this classification problem as a solution to a lack of salary information, drop the three numeric salary variables: High.Estimate, Estimate.Base.Salary, and Low.Estimate. 
 
 ```{r}
 df$High.Income <- df$Estimate.Base.Salary >= median(df$Estimate.Base.Salary)
@@ -104,17 +125,46 @@ df <- df[!names(df) %in% c(
 )]
 ```
 
+## Feature Variables
+
+Next we need to select the feature variables that will act as predictors of the target variable, High.Income. All variables left after data cleaning could potentially influence the job posting salary. We are looking for independent variables that could affect salary. 
+
+Company.Sector is dependent on Company.Industry. Job.Location is dependent on State. Possibly only one of these is needed, this will be clear in the classification problem.
+
+Identify the numerical and categorical feature variables:
+
+```{r}
+
+vars <- setdiff(colnames(df), "High.Income")
+
+cat_var <- vars[
+  sapply(df[, vars], class) %in% c("factor", "character", "logical")
+]
+num_var <- vars[
+  sapply(df[, vars], class) %in% "numeric"
+]
+
+print(paste("There are", as.character(length(cat_var)), "categorical features,", as.character(length(num_var)), "numerical features, and 1 target.", sep = " "))
+
+```
+
+## Test and Training Sets 
+
 Perform a 90/10 random split on the dataset to get a training and test set.
 
 ```{r}
 split <- runif(nrow(df))
 test <- df[split >= 0.9, ]
 train <- df[split < 0.9, ]
+
+print(paste("The training set has", as.character(nrow(train)), "observations, and the test set has", as.character(nrow(test)), sep = " "))
+
 ```
 
-# Classification
-
 ## Null model
+
+Firstly, we will compute a null model.
+
 ```{r}
 calc_auc <- function(pred_col, out_col) {
   as.numeric(performance(prediction(pred_col, out_col), "auc")@y.values)
@@ -129,15 +179,6 @@ calc_auc(rep(null_model, nrow(test)), test$High.Income)
 ```
 
 ## Single Variable Model
-```{r}
-variables <- setdiff(colnames(df), "High.Income")
-categorical_variables <- variables[
-  sapply(train[, variables], class) %in% c("factor", "character", "logical")
-]
-numeric_variables <- variables[
-  sapply(train[, variables], class) %in% "numeric"
-]
-```
 
 ```{r}
 single_variable_prediction <- function(feature_col, output_col, test_col) {
