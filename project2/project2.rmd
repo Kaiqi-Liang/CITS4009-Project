@@ -25,7 +25,9 @@ library(ROCit)
 df <- read.csv(file = "AustraliaDataScienceJobs.csv", header = TRUE)
 ```
 
-```{r, echo=FALSE}
+Handle missing values.
+
+```{r}
 df[df == ""] <- NA
 
 df <- rename(df,
@@ -78,6 +80,8 @@ df[rating_columns] <- sapply(df[rating_columns], function(column) {
   column[na] <- median(!na)
   column
 })
+
+str(df)
 ```
 
 Create target column by splitting a numerical variable into 2 categories using the median.
@@ -106,13 +110,17 @@ train <- df[split < 0.9, ]
 calc_auc <- function(pred_col, out_col) {
   as.numeric(performance(prediction(pred_col, out_col), "auc")@y.values)
 }
+log_likelihood <- function(ypred, ytrue) {
+  sum(ifelse(ytrue, log(ypred), log(1 - ypred)))
+}
 ```
 
 As it is a balanced dataset the null model will have a 50% chance of predicting `TRUE` which results in an AUC of 0.5.
 
 ```{r}
 null_model <- sum(train$High.Income) / nrow(train)
-calc_auc(rep(null_model, nrow(test)), test$High.Income)
+(calc_auc(rep(null_model, nrow(test)), test$High.Income))
+(log_likelihood(null_model, train$High.Income))
 ```
 
 ## Single Variable Model
@@ -121,14 +129,11 @@ variables <- setdiff(colnames(df), "High.Income")
 categorical_variables <- variables[
   sapply(train[, variables], class) %in% c("factor", "character", "logical")
 ]
-numeric_variables <- variables[
-  sapply(train[, variables], class) %in% "numeric"
-]
 ```
 
 ```{r}
-single_variable_prediction <- function(feature_col, output_col, test_col) {
-  t <- table(feature_col, output_col)
+single_variable_prediction <- function(pred_col, output_col, test_col) {
+  t <- table(pred_col, output_col)
   pred <- (t[, 2] / (t[, 1] + t[, 2]))[as.character(test_col)]
   pred[is.na(pred)] <- sum(output_col) / length(output_col)
   pred
@@ -138,7 +143,7 @@ single_variable_prediction <- function(feature_col, output_col, test_col) {
 100-fold cross-validation.
 
 ```{r}
-for (variable in categorical_variables) {
+single_variable_100_fold_cross_validation <- function(variable) {
   aucs <- rep(0, 100)
   for (i in seq(aucs)) {
     split <- rbinom(n = nrow(train), size = 1, prob = 0.1) == 1
@@ -153,6 +158,23 @@ for (variable in categorical_variables) {
   if (mean_auc > 0.65) {
     print(sprintf("%s: %4.3f", variable, mean_auc))
   }
+  mean_auc
+}
+```
+
+Find the average auc for each variable over 100 fold cross validation and print out the ones over 0.65.
+
+```{r}
+for (variable in rating_columns) {
+  if (variable == "Friend.Recommendation") {
+    train[variable] <- cut(train[, variable], seq(0, 100, 10))
+  } else {
+    train[variable] <- cut(train[, variable], seq(0, 5, 0.5))
+  }
+  single_variable_100_fold_cross_validation(variable)
+}
+for (variable in categorical_variables) {
+  single_variable_100_fold_cross_validation(variable)
 }
 ```
 
@@ -202,18 +224,24 @@ grid.arrange(
 )
 ```
 
-```{r, out.width="50%"}
-roc_plot <- function(pred_col, out_col, colour_id = 2, overlaid = FALSE) {
+```{r, fig.asp=1, out.width="50%"}
+roc_plot <- function(pred_col, out_col, colour, overlaid = FALSE) {
   par(new = overlaid)
   plot(
     rocit(score = pred_col, class = out_col),
-    col = c(colour_id, 1),
+    col = c(colour, "black"),
     legend = FALSE,
     YIndex = FALSE
   )
+  legend(
+    "bottomright",
+    col = c("orange", "blue"),
+    c("Job Title", "Company"),
+    lwd = 2
+  )
 }
-roc_plot(title_pred, test$High.Income)
-roc_plot(company_pred, test$High.Income, 3, TRUE)
+roc_plot(title_pred, test$High.Income, "orange")
+roc_plot(company_pred, test$High.Income, "blue", TRUE)
 ```
 
 ## Naive Bayes
