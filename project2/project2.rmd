@@ -13,21 +13,41 @@ output:
     number_sections: true
 ---
 
-# Data Preparation
+# Introduction
+
+The dataset chosen is the Australia's Data Science Job Listings for August 2022, which can be downloaded from [Kaggle](https://www.kaggle.com/datasets/nadzmiagthomas/australia-data-science-jobs). It was scrapped from [Glassdoor](https://www.glassdoor.com.au) which is a website where current and former employees anonymously review companies.
+
+# Setup
+
+Clean and set workspace
+
+```{r}
+rm(list = ls())
+if (!is.null(sessionInfo()$otherPkgs)) {
+  invisible(
+    lapply(paste0('package:', names(sessionInfo()$otherPkgs)),
+           detach, character.only=TRUE, unload=TRUE))}
+```
+
+Load libraries and dataset as df.
 
 ```{r, message=FALSE}
 library(dplyr)
 library(ROCR)
 library(ggplot2)
+library(grid)
 library(gridExtra)
 library(ROCit)
+library(caret)
 
 df <- read.csv(file = "AustraliaDataScienceJobs.csv", header = TRUE)
 ```
 
-Handle missing values.
+# Data Preparation
 
-```{r}
+Firstly, clean the dataset and remove or impute missing values. This is the same process as undertaken in Project 1 and is resultingly not explained here. 
+
+```{r, echo=FALSE}
 df[df == ""] <- NA
 
 df <- rename(df,
@@ -40,6 +60,11 @@ df <- rename(df,
 )
 
 # Drop columns
+# Country is always Australia so not a valuable variable
+# Job Descriptions and URL are text based and outside the scope of this unit
+# Company.Founded is dependent on Company, doesn't provide any new information for the classification model
+# Company.CEO.Approval has too many missing values
+# Number.of.Rater is the number of people in the company who rated - not a valuable variab;e 
 df <- df[!names(df) %in% c(
     "Country",
     "Job.Descriptions",
@@ -84,7 +109,13 @@ df[rating_columns] <- sapply(df[rating_columns], function(column) {
 str(df)
 ```
 
-Create target column by splitting a numerical variable into 2 categories using the median.
+# Classification
+
+## Target Variable
+
+Sometimes job postings don't include the salary. A classification model that predicts the salary range of future job postings, based on past postings with salary information, would be incredibly useful for job hunters who don't want to waste time applying for unsuitable jobs. As such, the response variable we have chosen is the income level of the job posting. The original dataset included three numeric salary variables: High.Estimate, Estimate.Base.Salary, and Low.Estimate. Focusing on the Estimate.Base.Salary this can be a binary classification problem of two classes: High.Income and Low.Income. We have taken the cutoff between these two classes to be the median of the Estimate.Base.Salary, \$95,000. Low.Income is a salary between \$0 - \$95,000 and is assigned a label of 0. High.Income is a salary between \$95,000 - \$Inf and is assigned a label of 1. Since the cutoff is based on the median, the dataset is almost balanced, with 955 High.Income observations and 950 Low.Income observations. 
+
+Create the "target" column High.Income by splitting the Estimate.Base.Salary at the median value of \$95,000. As we are approaching this classification problem as a solution to a lack of salary information, drop the three numeric salary variables: High.Estimate, Estimate.Base.Salary, and Low.Estimate. 
 
 ```{r}
 df$High.Income <- df$Estimate.Base.Salary >= median(df$Estimate.Base.Salary)
@@ -93,7 +124,47 @@ df <- df[!names(df) %in% c(
   "Estimate.Base.Salary",
   "Low.Estimate"
 )]
+paste(
+  "There are",
+  nrow(df[df$High.Income, ]),
+  "high income observations.",
+  "There are",
+  nrow(df[!df$High.Income, ]),
+  "low income observations",
+  sep = " "
+)
 ```
+
+## Feature Variables
+
+Next we need to select the feature variables that will act as predictors of the target variable, High.Income. All variables left after data cleaning could potentially influence the job posting salary. We are looking for independent variables that could affect salary. 
+
+Company.Sector is dependent on Company.Industry. Job.Location is dependent on State. Possibly only one of these is needed, this will be clear in the classification problem.
+
+Identify the numerical and categorical feature variables:
+
+```{r}
+variables <- setdiff(colnames(df), "High.Income")
+categorical_variables <- variables[
+  sapply(df[, variables], class) %in% c("factor", "character", "logical")
+]
+
+numerical_variables <- variables[
+  sapply(df[, variables], class) %in% "numerical"
+]
+
+paste(
+  "There are",
+  length(categorical_variables),
+  "categorical features,",
+  length(numerical_variables),
+  "numerical features",
+  "and 1 target column.",
+  sep = " "
+)
+```
+
+## Test and Training Sets 
 
 Perform a 90/10 random split on the dataset to get a training and test set.
 
@@ -101,11 +172,23 @@ Perform a 90/10 random split on the dataset to get a training and test set.
 split <- runif(nrow(df))
 test <- df[split >= 0.9, ]
 train <- df[split < 0.9, ]
+
+paste(
+  "The training set has",
+  nrow(train),
+  "observations,
+  and the test set has",
+  nrow(test),
+  sep = " "
+)
 ```
 
-# Classification
-
 ## Null model
+
+Firstly, we will compute a null model. The null model will always return the the majority category. As mentioned earlier, the dataset is almost balanced so the model will have a 50% chance of predicting High.Income (`TRUE`), resulting in an Area Under the Curve (AUC) of 0.5. 
+
+Calc_auc is a formula that calculates the AUC of a model based on the predictor and target. 
+
 ```{r}
 calc_auc <- function(pred_col, out_col) {
   as.numeric(performance(prediction(pred_col, out_col), "auc")@y.values)
@@ -115,8 +198,6 @@ log_likelihood <- function(ypred, ytrue) {
 }
 ```
 
-As it is a balanced dataset the null model will have a 50% chance of predicting `TRUE` which results in an AUC of 0.5.
-
 ```{r}
 null_model <- sum(train$High.Income) / nrow(train)
 (calc_auc(rep(null_model, nrow(test)), test$High.Income))
@@ -124,12 +205,6 @@ null_model <- sum(train$High.Income) / nrow(train)
 ```
 
 ## Single Variable Model
-```{r}
-variables <- setdiff(colnames(df), "High.Income")
-categorical_variables <- variables[
-  sapply(train[, variables], class) %in% c("factor", "character", "logical")
-]
-```
 
 ```{r}
 single_variable_prediction <- function(pred_col, output_col, test_col) {
@@ -143,7 +218,7 @@ single_variable_prediction <- function(pred_col, output_col, test_col) {
 100-fold cross-validation.
 
 ```{r}
-single_variable_100_fold_cross_validation <- function(variable) {
+cross_validation_100_fold <- function(variable) {
   aucs <- rep(0, 100)
   for (i in seq(aucs)) {
     split <- rbinom(n = nrow(train), size = 1, prob = 0.1) == 1
@@ -165,16 +240,16 @@ single_variable_100_fold_cross_validation <- function(variable) {
 Find the average auc for each variable over 100 fold cross validation and print out the ones over 0.65.
 
 ```{r}
-for (variable in rating_columns) {
+for (variable in numerical_variables) {
   if (variable == "Friend.Recommendation") {
     train[variable] <- cut(train[, variable], seq(0, 100, 10))
   } else {
     train[variable] <- cut(train[, variable], seq(0, 5, 0.5))
   }
-  single_variable_100_fold_cross_validation(variable)
+  cross_validation_100_fold(variable)
 }
 for (variable in categorical_variables) {
-  single_variable_100_fold_cross_validation(variable)
+  cross_validation_100_fold(variable)
 }
 ```
 
@@ -247,3 +322,114 @@ roc_plot(company_pred, test$High.Income, "blue", TRUE)
 ## Naive Bayes
 
 ## Logistic Regression
+
+Logistic regression can be used to classify a variable dependent on one or more independent features. LR will find the best fitting model to describe the relationship between the dependent and the independent variables. We will be using binomial type LR, as the target variable can only have two possible types - High.Income or not. 
+
+Firstly, create the formula for logistic regression and fit the model
+```{r}
+
+# fmla <- paste(target, paste(features, collapse=" + "), sep=" ~ ")
+# cat(fmla)
+
+model <- glm(High.Income~., data=train, family=binomial(link="logit"))
+# summary(model)
+
+```
+
+```{r}
+summary(model)
+```
+
+Next use the model to make predictions on the training and test set. 
+
+The predict function gives the probability that the observation has a response of 1 - i.e. is a High.Income observations. 
+
+Overlaying these probabilities reveal that the model has a 100% chance of predicting 1 for High.Income observations and 0 for Low.Income observations.
+```{r}
+
+train$pred <- predict(model, data = train, type="response")
+
+ggplot(train, aes(x = pred)) +
+  geom_histogram(aes(color = High.Income, fill = High.Income), position = "identity", bins = 50, alpha = 0.4) + 
+  ggtitle('Probability of Predicting the Observation is High.Income') + 
+  xlab('Probability')
+
+train %>% select(pred, High.Income)
+
+```
+
+
+```{r}
+
+# Prediction, precision, and recall objects
+prediction_obj <- prediction(train$pred, train$High.Income)
+precision_obj <- performance(perf, measure="prec")
+recall_obj <- performance(perf, measure="rec")
+
+thresh <- (precision_obj@x.values)[[1]] # threshold
+precision <- (precision_obj@y.values)[[1]] # precision
+recall <- (recall_obj@y.values)[[1]] # recall
+
+ROCdf <- data.frame(threshold=thresh, precision=precision, recall=recall)
+ROCdf
+
+# Null Probability 
+pnull <- mean(as.numeric(train$High.Income))
+cat('pnull=', pnull)
+```
+
+Plot the enrichment rate (the ratio of precision to the average rate of positives) and recall versus the threshold value
+
+```{r}
+p1 <- ggplot(ROCdf, aes(x=threshold)) + geom_line(aes(y=precision/pnull)) +
+coord_cartesian(xlim = c(0,1), ylim=c(0,5) ) + labs(y="Enrichment rate")
+p2 <- ggplot(ROCdf, aes(x=threshold)) + geom_line(aes(y=recall)) +
+coord_cartesian(xlim = c(0,1))
+grid.arrange(p1, p2, nrow = 2)
+```
+For test set 
+
+Ran into a problem. Job.Title has some unique instances, e.g. Animal Health Advisor. Thus, it is possible for the trained model to miss these (if they were randomly assigned into test). We cannot predict for which we have no data.
+
+For now try removing these cases. This is almost definitely wrong. Need to fix cause the graphs look wacky.
+
+```{r}
+test_modified <- test
+test_modified$Job.Title[which(!(test_modified$Job.Title %in% unique(train$Job.Title)))] <- NA  # Replace new levels by NA
+test_modified$Job.Location[which(!(test_modified$Job.Location %in% unique(train$Job.Location)))] <- NA  # Replace new levels by NA
+test_modified$Company[which(!(test_modified$Company %in% unique(train$Company)))] <- NA  # Replace new levels by NA
+test_modified$Company.Industry[which(!(test_modified$Company.Industry %in% unique(train$Company.Industry)))] <- NA  # Replace new levels by NA
+
+```
+
+```{r}
+
+test$pred <- predict(model, newdata = test_modified, type="response")
+
+ggplot(test, aes(x = pred)) +
+  geom_histogram(aes(color = High.Income, fill = High.Income), position = "identity", bins = 50, alpha = 0.4) + 
+  ggtitle('Probability of Predicting the Observation is High.Income') + 
+  xlab('Probability')
+
+test_modified %>% select(pred, High.Income)
+
+```
+```{r}
+cat("Confusion matrix of 'High.Income' predictions:\n")
+
+## Confusion matrix of 'High.Income' predictions:
+confusion.test <- table(actual=test$High.Income, predicted=test$pred>0.05)
+confusion.test
+
+precision <- confusion.test[2,2] / sum(confusion.test[,2]) # TP / (TP+FP)
+
+recall <- confusion.test[2,2] / sum(confusion.test[2,]) # TP / (TP+FN)
+
+enrich <- precision / mean(as.numeric(test$High.Income))
+
+print(paste("The precision is", as.character(precision), ". The recall is", as.character(recall), "and the enrichment rate is", as.character(enrich), sep = " "))
+
+```
+
+
+# Clustering 
