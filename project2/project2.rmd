@@ -39,6 +39,7 @@ library(grid)
 library(gridExtra)
 library(ROCit)
 library(caret)
+library(e1071)
 
 df <- read.csv(file = "AustraliaDataScienceJobs.csv", header = TRUE)
 ```
@@ -150,7 +151,7 @@ categorical_variables <- variables[
 ]
 
 numerical_variables <- variables[
-  sapply(df[, variables], class) %in% "numerical"
+  sapply(df[, variables], class) %in% "numeric"
 ]
 
 paste(
@@ -241,12 +242,19 @@ Find the average auc for each variable over 100 fold cross validation and print 
 
 ```{r}
 for (variable in numerical_variables) {
+  categorical_variable <- paste(variable, "categorical", sep = "_")
   if (variable == "Friend.Recommendation") {
-    train[variable] <- cut(train[, variable], seq(0, 100, 10))
+    train[categorical_variable] <- cut(
+      train[, variable],
+      seq(0, 100, 10)
+    )
   } else {
-    train[variable] <- cut(train[, variable], seq(0, 5, 0.5))
+    train[categorical_variable] <- cut(
+      train[, variable],
+      seq(0, 5, 0.5)
+    )
   }
-  cross_validation_100_fold(variable)
+  cross_validation_100_fold(categorical_variable)
 }
 for (variable in categorical_variables) {
   cross_validation_100_fold(variable)
@@ -320,6 +328,20 @@ roc_plot(company_pred, test$High.Income, "blue", TRUE)
 ```
 
 ## Naive Bayes
+
+```{r}
+(f <- paste(
+  "High.Income ~",
+  paste(
+    c(
+      categorical_variables,
+      paste(numerical_variables, "_categorical", sep = "")
+    ),
+    collapse = " + "
+  )
+))
+model <- naiveBayes(as.formula(f), train)
+```
 
 ## Logistic Regression
 
