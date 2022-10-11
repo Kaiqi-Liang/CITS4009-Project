@@ -119,7 +119,7 @@ Sometimes job postings don't include the salary. A classification model that pre
 Create the "target" column High.Income by splitting the Estimate.Base.Salary at the median value of \$95,000. As we are approaching this classification problem as a solution to a lack of salary information, drop the three numeric salary variables: High.Estimate, Estimate.Base.Salary, and Low.Estimate. 
 
 ```{r}
-df$High.Income <- df$Estimate.Base.Salary >= median(df$Estimate.Base.Salary)
+df[target] <- df$Estimate.Base.Salary >= median(df$Estimate.Base.Salary)
 df <- df[!names(df) %in% c(
   "High.Estimate",
   "Estimate.Base.Salary",
@@ -127,10 +127,10 @@ df <- df[!names(df) %in% c(
 )]
 paste(
   "There are",
-  nrow(df[df$High.Income, ]),
+  nrow(df[df[target], ]),
   "high income observations.",
   "There are",
-  nrow(df[!df$High.Income, ]),
+  nrow(df[!df[target], ]),
   "low income observations",
   sep = " "
 )
@@ -145,13 +145,14 @@ Company.Sector is dependent on Company.Industry. Job.Location is dependent on St
 Identify the numerical and categorical feature variables:
 
 ```{r}
-variables <- setdiff(colnames(df), "High.Income")
-categorical_variables <- variables[
-  sapply(df[, variables], class) %in% c("factor", "character", "logical")
-]
+target <- "High.Income"
+features <- setdiff(colnames(df), target)
 
-numerical_variables <- variables[
-  sapply(df[, variables], class) %in% "numeric"
+categorical_variables <- features[
+  sapply(df[, features], class) %in% c("factor", "character", "logical")
+]
+numerical_variables <- features[
+  sapply(df[, features], class) %in% "numeric"
 ]
 
 paste(
@@ -200,9 +201,9 @@ log_likelihood <- function(ypred, ytrue) {
 ```
 
 ```{r}
-null_model <- sum(training_set$High.Income) / nrow(training_set)
-(calc_auc(rep(null_model, nrow(test_set)), test_set$High.Income))
-(log_likelihood(null_model, training_set$High.Income))
+null_model <- sum(training_set[target]) / nrow(training_set)
+(calc_auc(rep(null_model, nrow(test_set)), test_set[target]))
+(log_likelihood(null_model, training_set[target]))
 ```
 
 ## Single Variable Model
@@ -266,12 +267,12 @@ Pick the top 2 highest average AUC.
 ```{r}
 title_pred <- single_variable_prediction(
   training_set$Job.Title,
-  training_set$High.Income,
+  training_set[target],
   test_set$Job.Title
 )
 company_pred <- single_variable_prediction(
   training_set$Company,
-  training_set$High.Income,
+  training_set[target],
   test_set$Company
 )
 ```
@@ -293,13 +294,13 @@ double_density_plot <- function(
 grid.arrange(
   double_density_plot(
     title_pred,
-    test_set$High.Income,
+    test_set[target],
     "Job Title",
     "density"
   ),
   double_density_plot(
     company_pred,
-    test_set$High.Income,
+    test_set[target],
     "Company",
     ""
   ),
@@ -323,16 +324,16 @@ roc_plot <- function(pred_col, out_col, colour, overlaid = FALSE) {
     lwd = 2
   )
 }
-roc_plot(title_pred, test_set$High.Income, "orange")
-roc_plot(company_pred, test_set$High.Income, "blue", TRUE)
+roc_plot(title_pred, test_set[target], "orange")
+roc_plot(company_pred, test_set[target], "blue", TRUE)
 ```
 
 ## Naive Bayes
 
 ```{r}
-caret::train(
-  training_set[variables],
-  as.factor(training_set$High.Income),
+naive_bayes <- caret::train(
+  training_set[features],
+  as.factor(training_set[target]),
   "naive_bayes"
 )
 ```
@@ -353,12 +354,12 @@ model <- naiveBayes(as.formula(f), training_set)
 
 ```{r}
 explainer <- lime(
-  training_set[variables],
+  training_set[features],
   model = model,
   bin_continuous = TRUE,
   n_bins = 10
 )
-example <- test_set[c(1, 3), variables]
+example <- test_set[c(1, 3), features]
 explanation <- explain(example, explainer, n_labels = 1, n_features = 4)
 plot_features(explanation)
 # predict(model, newData = train)
@@ -375,8 +376,8 @@ Firstly, create the formula for logistic regression and fit the model
 # cat(fmla)
 
 caret::train(
-  x = training_set[variables],
-  y = as.factor(training_set$High.Income),
+  x = training_set[features],
+  y = as.factor(training_set[target]),
   method = "glm",
   family = binomial(link = "logit"),
   metric = "Accuracy"
@@ -412,7 +413,7 @@ train %>% select(pred, High.Income)
 ```{r}
 
 # Prediction, precision, and recall objects
-prediction_obj <- prediction(train$pred, train$High.Income)
+prediction_obj <- prediction(train$pred, train[target])
 precision_obj <- performance(perf, measure="prec")
 recall_obj <- performance(perf, measure="rec")
 
@@ -424,7 +425,7 @@ ROCdf <- data.frame(threshold=thresh, precision=precision, recall=recall)
 ROCdf
 
 # Null Probability 
-pnull <- mean(as.numeric(train$High.Income))
+pnull <- mean(as.numeric(train[target]))
 cat('pnull=', pnull)
 ```
 
@@ -468,14 +469,14 @@ test_modified %>% select(pred, High.Income)
 cat("Confusion matrix of 'High.Income' predictions:\n")
 
 ## Confusion matrix of 'High.Income' predictions:
-confusion.test <- table(actual=test$High.Income, predicted=test$pred>0.05)
+confusion.test <- table(actual=test[target], predicted=test$pred>0.05)
 confusion.test
 
 precision <- confusion.test[2,2] / sum(confusion.test[,2]) # TP / (TP+FP)
 
 recall <- confusion.test[2,2] / sum(confusion.test[2,]) # TP / (TP+FN)
 
-enrich <- precision / mean(as.numeric(test$High.Income))
+enrich <- precision / mean(as.numeric(test[target]))
 
 print(paste("The precision is", as.character(precision), ". The recall is", as.character(recall), "and the enrichment rate is", as.character(enrich), sep = " "))
 
