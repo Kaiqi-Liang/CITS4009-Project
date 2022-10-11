@@ -119,7 +119,7 @@ Sometimes job postings don't include the salary. A classification model that pre
 Create the "target" column High.Income by splitting the Estimate.Base.Salary at the median value of \$95,000. As we are approaching this classification problem as a solution to a lack of salary information, drop the three numeric salary variables: High.Estimate, Estimate.Base.Salary, and Low.Estimate. 
 
 ```{r}
-df[target] <- df$Estimate.Base.Salary >= median(df$Estimate.Base.Salary)
+df$High.Income <- df$Estimate.Base.Salary >= median(df$Estimate.Base.Salary)
 df <- df[!names(df) %in% c(
   "High.Estimate",
   "Estimate.Base.Salary",
@@ -127,10 +127,10 @@ df <- df[!names(df) %in% c(
 )]
 paste(
   "There are",
-  nrow(df[df[target], ]),
+  nrow(df[df$High.Income, ]),
   "high income observations.",
   "There are",
-  nrow(df[!df[target], ]),
+  nrow(df[!df$High.Income, ]),
   "low income observations",
   sep = " "
 )
@@ -178,8 +178,7 @@ training_set <- df[split < 0.9, ]
 paste(
   "The training set has",
   nrow(training_set),
-  "observations,
-  and the test set has",
+  "observations and the test set has",
   nrow(test_set),
   sep = " "
 )
@@ -203,7 +202,7 @@ log_likelihood <- function(ypred, ytrue) {
 ```{r}
 null_model <- sum(training_set[target]) / nrow(training_set)
 (calc_auc(rep(null_model, nrow(test_set)), test_set[target]))
-(log_likelihood(null_model, training_set[target]))
+(log_likelihood(null_model, training_set$High.Income))
 ```
 
 ## Single Variable Model
@@ -267,12 +266,12 @@ Pick the top 2 highest average AUC.
 ```{r}
 title_pred <- single_variable_prediction(
   training_set$Job.Title,
-  training_set[target],
+  training_set$High.Income,
   test_set$Job.Title
 )
 company_pred <- single_variable_prediction(
   training_set$Company,
-  training_set[target],
+  training_set$High.Income,
   test_set$Company
 )
 ```
@@ -324,8 +323,8 @@ roc_plot <- function(pred_col, out_col, colour, overlaid = FALSE) {
     lwd = 2
   )
 }
-roc_plot(title_pred, test_set[target], "orange")
-roc_plot(company_pred, test_set[target], "blue", TRUE)
+roc_plot(title_pred, test_set$High.Income, "orange")
+roc_plot(company_pred, test_set$High.Income, "blue", TRUE)
 ```
 
 ## Naive Bayes
