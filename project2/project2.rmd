@@ -60,6 +60,9 @@ df <- rename(df,
   Friend.Recommendation = Company.Friend.Reccomendation
 )
 
+# Change the location Australia to Unknown as all the other locations are cities other than countries.
+df$Job.Location[df$Job.Location == "Australia"] <- "Unknown"
+
 # Drop columns
 # Country is always Australia so not a valuable variable
 # Job Descriptions and URL are text based and outside the scope of this unit
@@ -119,7 +122,8 @@ Sometimes job postings don't include the salary. A classification model that pre
 Create the "target" column High.Income by splitting the Estimate.Base.Salary at the median value of \$95,000. As we are approaching this classification problem as a solution to a lack of salary information, drop the three numeric salary variables: High.Estimate, Estimate.Base.Salary, and Low.Estimate. 
 
 ```{r}
-df$High.Income <- df$Estimate.Base.Salary >= median(df$Estimate.Base.Salary)
+target <- "High.Income"
+df[, target] <- df$Estimate.Base.Salary >= median(df$Estimate.Base.Salary)
 df <- df[!names(df) %in% c(
   "High.Estimate",
   "Estimate.Base.Salary",
@@ -127,10 +131,9 @@ df <- df[!names(df) %in% c(
 )]
 paste(
   "There are",
-  nrow(df[df$High.Income, ]),
-  "high income observations.",
-  "There are",
-  nrow(df[!df$High.Income, ]),
+  nrow(df[df[, target], ]),
+  "high income observations. There are",
+  nrow(df[!df[, target], ]),
   "low income observations",
   sep = " "
 )
@@ -145,7 +148,6 @@ Company.Sector is dependent on Company.Industry. Job.Location is dependent on St
 Identify the numerical and categorical feature variables:
 
 ```{r}
-target <- "High.Income"
 features <- setdiff(colnames(df), target)
 
 categorical_variables <- features[
@@ -164,6 +166,27 @@ paste(
   "and 1 target column.",
   sep = " "
 )
+```
+
+Convert numerical variables to categorical.
+
+```{r}
+numerical_to_categorical <- c()
+for (variable in numerical_variables) {
+  categorical_variable <- paste(variable, "categorical", sep = "_")
+  numerical_to_categorical <- c(numerical_to_categorical, categorical_variable)
+  if (variable == "Friend.Recommendation") {
+    df[categorical_variable] <- cut(
+      df[, variable],
+      seq(0, 100, 10)
+    )
+  } else {
+    df[categorical_variable] <- cut(
+      df[, variable],
+      seq(0, 5, 0.5)
+    )
+  }
+}
 ```
 
 ## Test and Training Sets 
@@ -202,7 +225,7 @@ log_likelihood <- function(ypred, ytrue) {
 ```{r}
 null_model <- sum(training_set[target]) / nrow(training_set)
 (calc_auc(rep(null_model, nrow(test_set)), test_set[target]))
-(log_likelihood(null_model, training_set$High.Income))
+(log_likelihood(null_model, training_set[, target]))
 ```
 
 ## Single Variable Model
@@ -225,13 +248,13 @@ cross_validation_100_fold <- function(variable) {
     split <- rbinom(n = nrow(training_set), size = 1, prob = 0.1) == 1
     pred_col <- single_variable_prediction(
       training_set[split, variable],
-      training_set[split, "High.Income"],
+      training_set[split, target],
       training_set[!split, variable]
     )
-    aucs[i] <- calc_auc(pred_col, training_set[!split, "High.Income"])
+    aucs[i] <- calc_auc(pred_col, training_set[!split, target])
   }
   mean_auc <- mean(aucs)
-  if (mean_auc > 0.65) {
+  if (mean_auc > 0.6) {
     print(sprintf("%s: %4.3f", variable, mean_auc))
   }
   mean_auc
@@ -241,20 +264,8 @@ cross_validation_100_fold <- function(variable) {
 Find the average auc for each variable over 100 fold cross validation and print out the ones over 0.65.
 
 ```{r}
-for (variable in numerical_variables) {
-  categorical_variable <- paste(variable, "categorical", sep = "_")
-  if (variable == "Friend.Recommendation") {
-    training_set[categorical_variable] <- cut(
-      training_set[, variable],
-      seq(0, 100, 10)
-    )
-  } else {
-    training_set[categorical_variable] <- cut(
-      training_set[, variable],
-      seq(0, 5, 0.5)
-    )
-  }
-  cross_validation_100_fold(categorical_variable)
+for (variable in numerical_to_categorical) {
+  cross_validation_100_fold(variable)
 }
 for (variable in categorical_variables) {
   cross_validation_100_fold(variable)
@@ -264,15 +275,15 @@ for (variable in categorical_variables) {
 Pick the top 2 highest average AUC.
 
 ```{r}
-title_pred <- single_variable_prediction(
-  training_set$Job.Title,
-  training_set$High.Income,
-  test_set$Job.Title
+industry_pred <- single_variable_prediction(
+  training_set$Company.Industry,
+  training_set[, target],
+  test_set$Company.Industry
 )
-company_pred <- single_variable_prediction(
-  training_set$Company,
-  training_set$High.Income,
-  test_set$Company
+recommendation_pred <- single_variable_prediction(
+  training_set$Friend.Recommendation,
+  training_set[, target],
+  test_set$Friend.Recommendation
 )
 ```
 
@@ -292,15 +303,15 @@ double_density_plot <- function(
 }
 grid.arrange(
   double_density_plot(
-    title_pred,
+    industry_pred,
     test_set[target],
-    "Job Title",
+    "Company Industry",
     "density"
   ),
   double_density_plot(
-    company_pred,
+    recommendation_pred,
     test_set[target],
-    "Company",
+    "Friend Recommendation",
     ""
   ),
   ncol = 2
@@ -308,7 +319,7 @@ grid.arrange(
 ```
 
 ```{r, fig.asp=1, out.width="50%"}
-roc_plot <- function(pred_col, out_col, colour, overlaid = FALSE) {
+roc_plot <- function(pred_col, out_col, colour = "red", overlaid = FALSE) {
   par(new = overlaid)
   plot(
     rocit(score = pred_col, class = out_col),
@@ -323,18 +334,56 @@ roc_plot <- function(pred_col, out_col, colour, overlaid = FALSE) {
     lwd = 2
   )
 }
-roc_plot(title_pred, test_set$High.Income, "orange")
-roc_plot(company_pred, test_set$High.Income, "blue", TRUE)
+roc_plot(industry_pred, test_set[, target], "orange")
+roc_plot(recommendation_pred, test_set[, target], "blue", TRUE)
+```
+
+```{r}
+plot_lime <- function(model, features) {
+  explainer <- lime(
+    training_set[features],
+    model = model,
+    bin_continuous = TRUE,
+    n_bins = 10
+  )
+  example <- test_set[c(1, 3), features]
+  explanation <- explain(example, explainer, n_labels = 1, n_features = 4)
+  plot_features(explanation)
+}
 ```
 
 ## Naive Bayes
 
 ```{r}
 naive_bayes <- caret::train(
-  training_set[features],
-  as.factor(training_set[target]),
-  "naive_bayes"
+  x = training_set[features],
+  y = as.factor(training_set[, target]),
+  method = "nb"
 )
+```
+
+```{r}
+evaluate_model <- function(model, features) {
+  pred <- predict(
+    model,
+    test_set[features],
+    "prob"
+  )[2]
+  pred <- unlist(pred)
+  print(calc_auc(pred, test_set[target]))
+  roc_plot(pred, test_set[, target])
+  double_density_plot(
+    pred,
+    test_set[target],
+    "Naive Bayes",
+    "density"
+  )
+  plot_lime(model, features)
+}
+```
+
+```{r}
+evaluate_model(naive_bayes, features)
 ```
 
 ```{r}
@@ -351,22 +400,25 @@ naive_bayes <- caret::train(
 model <- naiveBayes(as.formula(f), training_set)
 ```
 
-```{r}
-explainer <- lime(
-  training_set[features],
-  model = model,
-  bin_continuous = TRUE,
-  n_bins = 10
-)
-example <- test_set[c(1, 3), features]
-explanation <- explain(example, explainer, n_labels = 1, n_features = 4)
-plot_features(explanation)
-# predict(model, newData = train)
-```
-
 ## Logistic Regression
 
 Logistic regression can be used to classify a variable dependent on one or more independent features. LR will find the best fitting model to describe the relationship between the dependent and the independent variables. We will be using binomial type LR, as the target variable can only have two possible types - High.Income or not. 
+
+```{r}
+logistic_variables <- setdiff(colnames(df), c(
+  "Company",
+  "Job.Title",
+  "Company.Industry",
+  "Job.Location",
+  "Company.Type"
+))
+logistic_regression <- caret::train(
+  x = training_set[logistic_variables],
+  y = as.factor(training_set[, target]),
+  method = "glm",
+  family = binomial(link = "logit")
+)
+```
 
 Firstly, create the formula for logistic regression and fit the model
 ```{r}
@@ -374,20 +426,15 @@ Firstly, create the formula for logistic regression and fit the model
 # fmla <- paste(target, paste(features, collapse=" + "), sep=" ~ ")
 # cat(fmla)
 
-caret::train(
-  x = training_set[features],
-  y = as.factor(training_set[target]),
-  method = "glm",
-  family = binomial(link = "logit"),
-  metric = "Accuracy"
-)
-# model <- glm(High.Income~., data=training_set, family=binomial(link="logit"))
+model <- glm(High.Income~., data=training_set, family=binomial(link="logit"))
 # summary(model)
-
+# predict(logistic, newData = test_set[features])
+# plot_lime(logistic, features)
+summary(model)
 ```
 
 ```{r}
-summary(model)
+evaluate_model(logistic_regression, logistic_variables)
 ```
 
 Next use the model to make predictions on the training and test set. 
