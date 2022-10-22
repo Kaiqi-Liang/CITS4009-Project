@@ -40,6 +40,7 @@ library(gridExtra)
 library(ROCit)
 library(caret)
 library(lime)
+library(knitr)
 
 df <- read.csv(file = "AustraliaDataScienceJobs.csv", header = TRUE)
 ```
@@ -264,26 +265,35 @@ cross_validation_100_fold <- function(variable) {
 Find the average auc for each variable over 100 fold cross validation and print out the ones over 0.65.
 
 ```{r}
-for (variable in numerical_to_categorical) {
+for (variable in c(numerical_to_categorical, categorical_variables)) {
   cross_validation_100_fold(variable)
-}
-for (variable in categorical_variables) {
-  cross_validation_100_fold(variable)
+  training_set[paste(variable, "pred", sep = "_")] <-
+    single_variable_prediction(
+      training_set[, variable],
+      training_set[, target],
+      training_set[, variable]
+    )
+  test_set[paste(variable, "pred", sep = "_")] <-
+    single_variable_prediction(
+      training_set[, variable],
+      training_set[, target],
+      test_set[, variable]
+    )
 }
 ```
 
 Pick the top 2 highest average AUC.
 
 ```{r}
-industry_pred <- single_variable_prediction(
-  training_set$Company.Industry,
+company_pred <- single_variable_prediction(
+  training_set$Company,
   training_set[, target],
-  test_set$Company.Industry
+  test_set$Company
 )
-recommendation_pred <- single_variable_prediction(
-  training_set$Friend.Recommendation,
+title_pred <- single_variable_prediction(
+  training_set$Job.Title,
   training_set[, target],
-  test_set$Friend.Recommendation
+  test_set$Job.Title
 )
 ```
 
@@ -303,13 +313,13 @@ double_density_plot <- function(
 }
 grid.arrange(
   double_density_plot(
-    industry_pred,
+    company_pred,
     test_set[target],
     "Company Industry",
     "density"
   ),
   double_density_plot(
-    recommendation_pred,
+    title_pred,
     test_set[target],
     "Friend Recommendation",
     ""
@@ -334,32 +344,49 @@ roc_plot <- function(pred_col, out_col, colour = "red", overlaid = FALSE) {
     lwd = 2
   )
 }
-roc_plot(industry_pred, test_set[, target], "orange")
-roc_plot(recommendation_pred, test_set[, target], "blue", TRUE)
+roc_plot(company_pred, test_set[, target], "orange")
+roc_plot(title_pred, test_set[, target], "blue", TRUE)
 ```
 
+## Model Evaluation
+
 ```{r}
-plot_lime <- function(model, features) {
+lime_plot <- function(model, features, pred) {
+  test_cases <- c()
+  for (i in seq(length(pred))) {
+    if (test_set[i, target] && pred[i]) {
+      test_cases <- c(test_cases, i)
+      break
+    }
+  }
+  for (i in seq(length(pred))) {
+    if (test_set[i, target] && !pred[i]) {
+      test_cases <- c(test_cases, i)
+      break
+    }
+  }
+  for (i in seq(length(pred))) {
+    if (!test_set[i, target] && !pred[i]) {
+      test_cases <- c(test_cases, i)
+      break
+    }
+  }
+  for (i in seq(length(pred))) {
+    if (!test_set[i, target] && pred[i]) {
+      test_cases <- c(test_cases, i)
+      break
+    }
+  }
   explainer <- lime(
     training_set[features],
     model = model,
     bin_continuous = TRUE,
     n_bins = 10
   )
-  example <- test_set[c(1, 3), features]
-  explanation <- explain(example, explainer, n_labels = 1, n_features = 4)
+  example <- test_set[test_cases, features]
+  explanation <- explain(example, explainer, n_labels = 1, n_features = length(features))
   plot_features(explanation)
 }
-```
-
-## Naive Bayes
-
-```{r}
-naive_bayes <- caret::train(
-  x = training_set[features],
-  y = as.factor(training_set[, target]),
-  method = "nb"
-)
 ```
 
 ```{r}
@@ -378,156 +405,64 @@ evaluate_model <- function(model, features) {
     "Naive Bayes",
     "density"
   )
-  plot_lime(model, features)
+}
+
+make_pred <- function(model, features) {
+  pred <- predict(
+    model,
+    test_set[features],
+  )
+  as.logical(pred)
 }
 ```
 
-```{r}
+## Naive Bayes
+
+```{r, warning=FALSE}
+naive_bayes <- caret::train(
+  x = training_set[features],
+  y = as.factor(training_set[, target]),
+  method = "nb"
+)
+```
+
+```{r, warning=FALSE, out.width="50%"}
 evaluate_model(naive_bayes, features)
 ```
 
-```{r}
-(f <- paste(
-  "High.Income ~",
-  paste(
-    c(
-      categorical_variables,
-      paste(numerical_variables, "_categorical", sep = "")
-    ),
-    collapse = " + "
-  )
-))
-model <- naiveBayes(as.formula(f), training_set)
+```{r, warning=FALSE, fig.width=10, fig.height=20}
+pred <- make_pred(naive_bayes, features)
+kable(table(test_set[, target], pred))
+lime_plot(naive_bayes, features, pred)
 ```
 
 ## Logistic Regression
 
 Logistic regression can be used to classify a variable dependent on one or more independent features. LR will find the best fitting model to describe the relationship between the dependent and the independent variables. We will be using binomial type LR, as the target variable can only have two possible types - High.Income or not. 
 
-```{r}
-logistic_variables <- setdiff(colnames(df), c(
-  "Company",
-  "Job.Title",
-  "Company.Industry",
-  "Job.Location",
-  "Company.Type"
-))
+```{r, warning=FALSE}
+probability_columns <- grep("_pred", names(training_set))
 logistic_regression <- caret::train(
-  x = training_set[logistic_variables],
+  x = training_set[probability_columns],
   y = as.factor(training_set[, target]),
   method = "glm",
   family = binomial(link = "logit")
 )
 ```
 
-Firstly, create the formula for logistic regression and fit the model
-```{r}
+```{r, warning=FALSE, out.width="50%"}
+evaluate_model(logistic_regression, probability_columns)
+```
 
-# fmla <- paste(target, paste(features, collapse=" + "), sep=" ~ ")
-# cat(fmla)
-
-model <- glm(High.Income~., data=training_set, family=binomial(link="logit"))
-# summary(model)
-# predict(logistic, newData = test_set[features])
-# plot_lime(logistic, features)
-summary(model)
+```{r, warning=FALSE, fig.width=10, fig.height=20}
+pred <- make_pred(logistic_regression, probability_columns)
+kable(table(test_set[, target], pred))
+lime_plot(logistic_regression, probability_columns, pred)
 ```
 
 ```{r}
-evaluate_model(logistic_regression, logistic_variables)
+summary(logistic_regression)
 ```
-
-Next use the model to make predictions on the training and test set. 
-
-The predict function gives the probability that the observation has a response of 1 - i.e. is a High.Income observations. 
-
-Overlaying these probabilities reveal that the model has a 100% chance of predicting 1 for High.Income observations and 0 for Low.Income observations.
-```{r}
-
-train$pred <- predict(model, data = train, type="response")
-
-ggplot(train, aes(x = pred)) +
-  geom_histogram(aes(color = High.Income, fill = High.Income), position = "identity", bins = 50, alpha = 0.4) + 
-  ggtitle('Probability of Predicting the Observation is High.Income') + 
-  xlab('Probability')
-
-train %>% select(pred, High.Income)
-
-```
-
-
-```{r}
-
-# Prediction, precision, and recall objects
-prediction_obj <- prediction(train$pred, train[target])
-precision_obj <- performance(perf, measure="prec")
-recall_obj <- performance(perf, measure="rec")
-
-thresh <- (precision_obj@x.values)[[1]] # threshold
-precision <- (precision_obj@y.values)[[1]] # precision
-recall <- (recall_obj@y.values)[[1]] # recall
-
-ROCdf <- data.frame(threshold=thresh, precision=precision, recall=recall)
-ROCdf
-
-# Null Probability 
-pnull <- mean(as.numeric(train[target]))
-cat('pnull=', pnull)
-```
-
-Plot the enrichment rate (the ratio of precision to the average rate of positives) and recall versus the threshold value
-
-```{r}
-p1 <- ggplot(ROCdf, aes(x=threshold)) + geom_line(aes(y=precision/pnull)) +
-coord_cartesian(xlim = c(0,1), ylim=c(0,5) ) + labs(y="Enrichment rate")
-p2 <- ggplot(ROCdf, aes(x=threshold)) + geom_line(aes(y=recall)) +
-coord_cartesian(xlim = c(0,1))
-grid.arrange(p1, p2, nrow = 2)
-```
-For test set 
-
-Ran into a problem. Job.Title has some unique instances, e.g. Animal Health Advisor. Thus, it is possible for the trained model to miss these (if they were randomly assigned into test). We cannot predict for which we have no data.
-
-For now try removing these cases. This is almost definitely wrong. Need to fix cause the graphs look wacky.
-
-```{r}
-test_modified <- test
-test_modified$Job.Title[which(!(test_modified$Job.Title %in% unique(train$Job.Title)))] <- NA  # Replace new levels by NA
-test_modified$Job.Location[which(!(test_modified$Job.Location %in% unique(train$Job.Location)))] <- NA  # Replace new levels by NA
-test_modified$Company[which(!(test_modified$Company %in% unique(train$Company)))] <- NA  # Replace new levels by NA
-test_modified$Company.Industry[which(!(test_modified$Company.Industry %in% unique(train$Company.Industry)))] <- NA  # Replace new levels by NA
-
-```
-
-```{r}
-
-test$pred <- predict(model, newdata = test_modified, type="response")
-
-ggplot(test, aes(x = pred)) +
-  geom_histogram(aes(color = High.Income, fill = High.Income), position = "identity", bins = 50, alpha = 0.4) + 
-  ggtitle('Probability of Predicting the Observation is High.Income') + 
-  xlab('Probability')
-
-test_modified %>% select(pred, High.Income)
-
-```
-```{r}
-cat("Confusion matrix of 'High.Income' predictions:\n")
-
-## Confusion matrix of 'High.Income' predictions:
-confusion.test <- table(actual=test[target], predicted=test$pred>0.05)
-confusion.test
-
-precision <- confusion.test[2,2] / sum(confusion.test[,2]) # TP / (TP+FP)
-
-recall <- confusion.test[2,2] / sum(confusion.test[2,]) # TP / (TP+FN)
-
-enrich <- precision / mean(as.numeric(test[target]))
-
-print(paste("The precision is", as.character(precision), ". The recall is", as.character(recall), "and the enrichment rate is", as.character(enrich), sep = " "))
-
-```
-
 
 # Clustering 
 
