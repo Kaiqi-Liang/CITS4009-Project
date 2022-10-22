@@ -206,13 +206,19 @@ calc_auc <- function(pred_col, out_col) {
   as.numeric(performance(prediction(pred_col, out_col), "auc")@y.values)
 }
 
-log_likelihood <- function(ypred, ytrue) {
+calc_log_likelihood <- function(ypred, ytrue) {
+  ypred <- ypred[ypred > 0 & ypred < 1]
   sum(ifelse(ytrue, log(ypred), log(1 - ypred)))
 }
 
 null_model <- sum(training_set[target]) / nrow(training_set)
-(calc_auc(rep(null_model, nrow(test_set)), test_set[target]))
-(log_likelihood(null_model, training_set[, target]))
+model_evaluations <- data.frame(
+  Model.Name = "Null Model",
+  Model.Type = "univariate",
+  AUC = calc_auc(rep(null_model, nrow(test_set)), test_set[target]),
+  Log.Likelihood = calc_log_likelihood(null_model, test_set[, target])
+)
+kable(model_evaluations)
 ```
 
 ## Single Variable Model
@@ -278,11 +284,28 @@ company_pred <- single_variable_prediction(
   training_set[, target],
   test_set$Company
 )
+model_evaluations <- rbind(
+  model_evaluations,
+  data.frame(
+  Model.Name = "Company",
+  Model.Type = "univariate",
+  AUC = calc_auc(company_pred, test_set[target]),
+  Log.Likelihood = calc_log_likelihood(company_pred, test_set[, target])
+))
+
 title_pred <- single_variable_prediction(
   training_set$Job.Title,
   training_set[, target],
   test_set$Job.Title
 )
+model_evaluations <- rbind(
+  model_evaluations,
+  data.frame(
+  Model.Name = "Job.Title",
+  Model.Type = "univariate",
+  AUC = calc_auc(title_pred, test_set[target]),
+  Log.Likelihood = calc_log_likelihood(title_pred, test_set[, target])
+))
 ```
 
 ```{r, fig.width=10, fig.height=3}
@@ -393,21 +416,35 @@ lime_plot <- function(model, features, pred) {
 ```
 
 ```{r}
-evaluate_model <- function(model, features) {
+evaluate_model <- function(model, features, name) {
   pred <- predict(
     model,
     test_set[features],
     "prob"
   )[2]
   pred <- unlist(pred)
-  print(calc_auc(pred, test_set[target]))
+
+  auc <- calc_auc(pred, test_set[target])
+  log_likelihood <- calc_log_likelihood(pred, test_set[, target])
+  print(paste("AUC:", auc))
+  print(paste("Log Likelihood:", log_likelihood))
+
   roc_plot(pred, test_set[, target])
   double_density_plot(
     pred,
     test_set[target],
-    "Naive Bayes",
+    name,
     "density"
   )
+
+  rbind(
+    model_evaluations,
+    data.frame(
+    Model.Name = name,
+    Model.Type = "multivariate",
+    AUC = auc,
+    Log.Likelihood = log_likelihood
+  ))
 }
 
 make_pred <- function(model, features) {
@@ -430,7 +467,11 @@ naive_bayes <- caret::train(
 ```
 
 ```{r, warning=FALSE, out.width="50%"}
-evaluate_model(naive_bayes, selected_features)
+model_evaluations <- evaluate_model(
+  naive_bayes,
+  selected_features,
+  "Naive Bayes"
+)
 ```
 
 ```{r, warning=FALSE, fig.width=10, fig.height=10}
@@ -441,7 +482,7 @@ lime_plot(naive_bayes, selected_features, pred)
 
 ## Logistic Regression
 
-Logistic regression can be used to classify a variable dependent on one or more independent features. It will find the best fitting model to describe the relationship between the dependent and the independent variables. As the target variable can only have two possible types - High.Income or not. We will be using binomial type LR,  
+Logistic regression can be used to classify a variable dependent on one or more independent features. It will find the best fitting model to describe the relationship between the dependent and the independent variables. As it is a binary classification task `binomial` distribution is used.
 
 ```{r, warning=FALSE}
 probability_columns <- paste(selected_features, "_pred", sep = "")
@@ -454,7 +495,11 @@ logistic_regression <- caret::train(
 ```
 
 ```{r, warning=FALSE, out.width="50%"}
-evaluate_model(logistic_regression, probability_columns)
+model_evaluations <- evaluate_model(
+  logistic_regression,
+  probability_columns,
+  "Logistic Regression"
+)
 ```
 
 ```{r, warning=FALSE, fig.width=10, fig.height=10}
@@ -463,103 +508,16 @@ kable(table(test_set[, target], pred))
 lime_plot(logistic_regression, probability_columns, pred)
 ```
 
+The top 2 highest performing single model variables `Job.Title` and `Company` are also indicated as the 2 most significant variables shown under the *Coefficients* part of the summary as their p-value are much smaller than others.
+
 ```{r}
 summary(logistic_regression)
 ```
 
-# Clustering 
-
-# Clustering 
+## Comparison
 
 ```{r}
-
-clust_df = df
-  # df %>% filter(Estimate.Base.Salary < 150000)
-head(clust_df)
+kable(model_evaluations)
 ```
 
-
-Firstly standardize numeric features to ensure scale does not adversely affect clustering 
-```{r}
-num_var <- colnames(df[
-  sapply(df, class) %in% c("numeric", "integer")
-])
-
-scaled_df <- scale(clust_df[,num_var])
-head(scaled_df)
-```
-
-Using the distance metric 'euclidean', output a dendrogram - a tree that represents nested clusters
-```{r}
-
-dist <-  dist(scaled_df, method = "manhattan")
-
-clust <-  hclust(dist, method <- "ward.D2")
-# summary(clust)
-# clust$height
-
-plot(clust)
-rect.hclust(clust, k=3)
-
-# plot(clust, labels=df$State)
-
-```
-Cutree takes in a clustering model and returns a vector of cluster group assignments for each row. We specify the number of groups by using k = 2
-
-```{r}
-
-groups <- cutree(clust, k=3)
-# groups
-
-print_clusters <- function(df, groups, cols_to_print) {
-  n_groups <- max(groups)
-  for (i in 1:n_groups) {
-    print(paste("cluster", i))
-    print(df[groups == i, cols_to_print])
-  }
-}
-
-cols_to_print <- c('Company.Revenue', num_var)
-print_clusters(clust_df, groups, cols_to_print)
-clust_df$group <- as.factor(groups)
-```
-
-```{r}
-
-ggplot(clust_df, aes(Estimate.Base.Salary, fill=group)) + 
-  geom_histogram()
-
-```
-
-```{r}
-
-ggplot(df, aes(groups, State)) + 
-  geom_count()
-```
-
-```{r}
-
-PCA <- prcomp(scaled_df) # Calculate the principal components of scaled_df
-PCA
-
-eigvals = PCA$sdev ** 2
-eigvecs = PCA$rotation
-
-#Cumulative Contribution to Total Variance 
-qplot(c(1:10), cumsum(eigvals)/sum(eigvals)*100) + 
-  geom_line() + 
-  xlab("Index") + 
-  ylab("Cumulative Contribution") +
-  ggtitle("Cumulative Contribution to Total Variance") +
-  ylim(0, 100)
-
-```
-
-```{r}
-nComp <- 2 # focus on the first two principal components
-project2D <- as.data.frame(predict(PCA, newdata=scaled_df)[,1:nComp])
-project2D
-# combine with `groups` and df$Country to form a 4-column data frame
-hclust.project2D <- cbind(project2D, cluster=as.factor(groups), state=df$State)
-head(hclust.project2D)
-```
+# Clustering
