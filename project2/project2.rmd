@@ -530,3 +530,69 @@ print(paste("The precision is", as.character(precision), ". The recall is", as.c
 
 
 # Clustering 
+
+
+Firstly standardize numeric features to ensure scale does not adversely affect clustering 
+```{r}
+scaled_df <- scale(df[,numerical_variables])
+head(scaled_df)
+```
+
+Using the distance metric 'euclidean', output a dendrogram - a tree that represents nested clusters
+```{r}
+
+dist <-  dist(scaled_df, method = "euclidean")
+
+clust <-  hclust(dist, method <- "ward.D2")
+# summary(clust)
+# clust$height
+
+plot(clust)
+rect.hclust(clust, k=5)
+#gives the dendrogram which shows cluster levels 
+
+# clus.den = as.dendrogram( hclust(dist(scaled_df)), method = "euclidean" )
+# 
+# clus.den = hclust((dist(scaled_df), method = "euclidean" ))
+# 
+# plot(clus.den)
+```
+Cutree takes in a clustering model and returns a vector of cluster group assignments for each row. We specify the number of groups by using k = 2
+
+```{r}
+
+groups <- cutree(clust, k=5)
+# groups
+
+print_clusters <- function(df, groups, cols_to_print) {
+  n_groups <- max(groups)
+  for (i in 1:n_groups) {
+    print(paste("cluster", i))
+    print(df[groups == i, cols_to_print])
+  }
+}
+
+cols_to_print <- c('Company.Revenue', numerical_variables)
+print_clusters(df, groups, cols_to_print)
+
+```
+
+```{r}
+df$group <- groups
+ggplot(df, aes(groups, State)) + 
+  geom_count()
+```
+
+
+```{r}
+
+groups.fp = as.data.frame( groups ) %>%
+  pivot_longer(cols = 1,
+               names_to = "max_clust",
+               values_to = "cluster"
+               )
+conf = xtabs( ~ cluster + max_clust, groups.fp )
+conf
+
+```
+
