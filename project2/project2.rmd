@@ -384,7 +384,7 @@ lime_plot <- function(model, features, pred) {
     n_bins = 10
   )
   example <- test_set[test_cases, features]
-  explanation <- explain(example, explainer, n_labels = 1, n_features = 4)
+  explanation <- explain(example, explainer, n_labels = 1, n_features = length(features))
   plot_features(explanation)
 }
 ```
@@ -430,7 +430,7 @@ naive_bayes <- caret::train(
 evaluate_model(naive_bayes, features)
 ```
 
-```{r, warning=FALSE, fig.width=10}
+```{r, warning=FALSE, fig.width=10, fig.height=20}
 pred <- make_pred(naive_bayes, features)
 kable(table(test_set[, target], pred))
 lime_plot(naive_bayes, features, pred)
@@ -450,14 +450,18 @@ logistic_regression <- caret::train(
 )
 ```
 
-```{r, warning=FALSE, fig.width=10}
+```{r, warning=FALSE, out.width="50%"}
+evaluate_model(logistic_regression, probability_columns)
+```
+
+```{r, warning=FALSE, fig.width=10, fig.height=20}
 pred <- make_pred(logistic_regression, probability_columns)
 kable(table(test_set[, target], pred))
 lime_plot(logistic_regression, probability_columns, pred)
 ```
 
-```{r, warning=FALSE, out.width="50%"}
-evaluate_model(logistic_regression, probability_columns)
+```{r}
+summary(logistic_regression)
 ```
 
 # Clustering
