@@ -121,11 +121,7 @@ The original dataset included three numeric salary variables: `High.Estimate`, `
 ```{r}
 target <- "High.Income"
 df[, target] <- df$Estimate.Base.Salary >= median(df$Estimate.Base.Salary)
-df <- df[!names(df) %in% c(
-  "High.Estimate",
-  "Estimate.Base.Salary",
-  "Low.Estimate"
-)]
+
 paste(
   "There are",
   nrow(df[df[, target], ]),
