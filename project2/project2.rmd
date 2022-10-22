@@ -460,37 +460,46 @@ summary(logistic_regression)
 
 # Clustering 
 
+# Clustering 
+
+```{r}
+
+clust_df = df
+  # df %>% filter(Estimate.Base.Salary < 150000)
+head(clust_df)
+```
+
 
 Firstly standardize numeric features to ensure scale does not adversely affect clustering 
 ```{r}
-scaled_df <- scale(df[,numerical_variables])
+num_var <- colnames(df[
+  sapply(df, class) %in% c("numeric", "integer")
+])
+
+scaled_df <- scale(clust_df[,num_var])
 head(scaled_df)
 ```
 
 Using the distance metric 'euclidean', output a dendrogram - a tree that represents nested clusters
 ```{r}
 
-dist <-  dist(scaled_df, method = "euclidean")
+dist <-  dist(scaled_df, method = "manhattan")
 
 clust <-  hclust(dist, method <- "ward.D2")
 # summary(clust)
 # clust$height
 
 plot(clust)
-rect.hclust(clust, k=5)
-#gives the dendrogram which shows cluster levels 
+rect.hclust(clust, k=3)
 
-# clus.den = as.dendrogram( hclust(dist(scaled_df)), method = "euclidean" )
-# 
-# clus.den = hclust((dist(scaled_df), method = "euclidean" ))
-# 
-# plot(clus.den)
+# plot(clust, labels=df$State)
+
 ```
 Cutree takes in a clustering model and returns a vector of cluster group assignments for each row. We specify the number of groups by using k = 2
 
 ```{r}
 
-groups <- cutree(clust, k=5)
+groups <- cutree(clust, k=3)
 # groups
 
 print_clusters <- function(df, groups, cols_to_print) {
@@ -501,27 +510,47 @@ print_clusters <- function(df, groups, cols_to_print) {
   }
 }
 
-cols_to_print <- c('Company.Revenue', numerical_variables)
-print_clusters(df, groups, cols_to_print)
+cols_to_print <- c('Company.Revenue', num_var)
+print_clusters(clust_df, groups, cols_to_print)
+clust_df$group <- as.factor(groups)
+```
+
+```{r}
+
+ggplot(clust_df, aes(Estimate.Base.Salary, fill=group)) + 
+  geom_histogram()
 
 ```
 
 ```{r}
-df$group <- groups
+
 ggplot(df, aes(groups, State)) + 
   geom_count()
 ```
 
-
 ```{r}
 
-groups.fp = as.data.frame( groups ) %>%
-  pivot_longer(cols = 1,
-               names_to = "max_clust",
-               values_to = "cluster"
-               )
-conf = xtabs( ~ cluster + max_clust, groups.fp )
-conf
+PCA <- prcomp(scaled_df) # Calculate the principal components of scaled_df
+PCA
+
+eigvals = PCA$sdev ** 2
+eigvecs = PCA$rotation
+
+#Cumulative Contribution to Total Variance 
+qplot(c(1:10), cumsum(eigvals)/sum(eigvals)*100) + 
+  geom_line() + 
+  xlab("Index") + 
+  ylab("Cumulative Contribution") +
+  ggtitle("Cumulative Contribution to Total Variance") +
+  ylim(0, 100)
 
 ```
 
+```{r}
+nComp <- 2 # focus on the first two principal components
+project2D <- as.data.frame(predict(PCA, newdata=scaled_df)[,1:nComp])
+project2D
+# combine with `groups` and df$Country to form a 4-column data frame
+hclust.project2D <- cbind(project2D, cluster=as.factor(groups), state=df$State)
+head(hclust.project2D)
+```
