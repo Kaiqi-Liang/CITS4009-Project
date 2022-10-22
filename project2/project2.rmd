@@ -29,7 +29,7 @@ if (!is.null(sessionInfo()$otherPkgs)) {
            detach, character.only=TRUE, unload=TRUE))}
 ```
 
-Load libraries and dataset as df.
+Load libraries and data.
 
 ```{r, message=FALSE}
 library(dplyr)
@@ -47,9 +47,9 @@ df <- read.csv(file = "AustraliaDataScienceJobs.csv", header = TRUE)
 
 # Data Preparation
 
-Firstly, clean the dataset and remove or impute missing values. This is the same process as undertaken in Project 1 and is resultingly not explained here. 
+Firstly, clean the dataset and remove or impute missing values.
 
-```{r, echo=FALSE}
+```{r}
 df[df == ""] <- NA
 
 df <- rename(df,
@@ -61,22 +61,18 @@ df <- rename(df,
   Friend.Recommendation = Company.Friend.Reccomendation
 )
 
-# Change the location Australia to Unknown as all the other locations are cities other than countries.
+# Change the location Australia to Unknown as all the other locations are
+# cities other than countries.
 df$Job.Location[df$Job.Location == "Australia"] <- "Unknown"
 
 # Drop columns
-# Country is always Australia so not a valuable variable
-# Job Descriptions and URL are text based and outside the scope of this unit
-# Company.Founded is dependent on Company, doesn't provide any new information for the classification model
-# Company.CEO.Approval has too many missing values
-# Number.of.Rater is the number of people in the company who rated - not a valuable variab;e 
 df <- df[!names(df) %in% c(
-    "Country",
-    "Job.Descriptions",
-    "Url",
-    "Company.Founded",
-    "Company.CEO.Approval",
-    "Number.of.Rater"
+    "Country", # always Australia
+    "Job.Descriptions", # text based
+    "Url", # similar to an ID
+    "Company.Founded", # dependent on Company which does not provide new info
+    "Company.CEO.Approval", # too many missing values
+    "Number.of.Rater" # not valuable
 )]
 
 # Drop rows that contain NAs in either Job Title or Company Size
@@ -95,7 +91,7 @@ df[industry_column] <- sapply(df[industry_column], function(column) {
   column
 })
 
-# Impute NAs with median values in the rating columns
+# Impute NAs with the median value in the rating columns
 rating_columns <- c(
   "Company.Rating",
   "Career.Opportunities",
@@ -118,9 +114,9 @@ str(df)
 
 ## Target Variable
 
-Sometimes job postings don't include the salary. A classification model that predicts the salary range of future job postings, based on past postings with salary information, would be incredibly useful for job hunters who don't want to waste time applying for unsuitable jobs. As such, the response variable we have chosen is the income level of the job posting. The original dataset included three numeric salary variables: High.Estimate, Estimate.Base.Salary, and Low.Estimate. Focusing on the Estimate.Base.Salary this can be a binary classification problem of two classes: High.Income and Low.Income. We have taken the cutoff between these two classes to be the median of the Estimate.Base.Salary, \$95,000. Low.Income is a salary between \$0 - \$95,000 and is assigned a label of 0. High.Income is a salary between \$95,000 - \$Inf and is assigned a label of 1. Since the cutoff is based on the median, the dataset is almost balanced, with 955 High.Income observations and 950 Low.Income observations. 
+Sometimes job postings do not include the salary. A classification model that predicts the salary range of future job postings, based on past job postings with salary information, would be incredibly useful for job hunters who prioritise salary when applying for jobs. As such, the response variable we have chosen is the income level of the job posting.
 
-Create the "target" column High.Income by splitting the Estimate.Base.Salary at the median value of \$95,000. As we are approaching this classification problem as a solution to a lack of salary information, drop the three numeric salary variables: High.Estimate, Estimate.Base.Salary, and Low.Estimate. 
+The original dataset included three numeric salary variables: `High.Estimate`, `Estimate.Base.Salary`, and `Low.Estimate`. In job descriptions the salary package is often provided as a range rather than a fixed number as there is room for negotiation, the lower end of the range is `Low.Estimate` and the higher end is `High.Estimate`, `Estimate.Base.Salary` is the average of the two. Hence focusing on the `Estimate.Base.Salary` this can be a binary classification problem of whether the income salary is high. The cutoff between these two classes is the median of the `Estimate.Base.Salary`, \$95,000, so one class has a salary between \$0 - \$95,000 and is assigned a label of `FALSE`, the other is a salary between \$95,000 - \$Inf and is assigned a label of `TRUE`. Since the cutoff is based on the median, the dataset is almost balanced, with 955 `TRUE` labels and 950 `FALSE` labels. 
 
 ```{r}
 target <- "High.Income"
@@ -192,12 +188,12 @@ for (variable in numerical_variables) {
 
 ## Test and Training Sets 
 
-Perform a 90/10 random split on the dataset to get a training and test set.
+Perform a 80/20 random split on the dataset to get a training and test set.
 
 ```{r}
 split <- runif(nrow(df))
-test_set <- df[split >= 0.9, ]
-training_set <- df[split < 0.9, ]
+test_set <- df[split >= 0.8, ]
+training_set <- df[split < 0.8, ]
 
 paste(
   "The training set has",
@@ -254,19 +250,21 @@ cross_validation_100_fold <- function(variable) {
     )
     aucs[i] <- calc_auc(pred_col, training_set[!split, target])
   }
-  mean_auc <- mean(aucs)
-  if (mean_auc > 0.6) {
-    print(sprintf("%s: %4.3f", variable, mean_auc))
-  }
-  mean_auc
+  mean(aucs)
 }
 ```
 
 Find the average auc for each variable over 100 fold cross validation and print out the ones over 0.65.
 
 ```{r}
+selected_features <- c()
 for (variable in c(numerical_to_categorical, categorical_variables)) {
-  cross_validation_100_fold(variable)
+  auc <- cross_validation_100_fold(variable)
+  if (auc > 0.6) {
+    print(sprintf("%s: %4.3f", variable, auc))
+    selected_features <- c(selected_features, variable)
+  }
+
   training_set[paste(variable, "pred", sep = "_")] <-
     single_variable_prediction(
       training_set[, variable],
@@ -420,20 +418,20 @@ make_pred <- function(model, features) {
 
 ```{r, warning=FALSE}
 naive_bayes <- caret::train(
-  x = training_set[features],
+  x = training_set[selected_features],
   y = as.factor(training_set[, target]),
   method = "nb"
 )
 ```
 
 ```{r, warning=FALSE, out.width="50%"}
-evaluate_model(naive_bayes, features)
+evaluate_model(naive_bayes, selected_features)
 ```
 
-```{r, warning=FALSE, fig.width=10, fig.height=20}
-pred <- make_pred(naive_bayes, features)
+```{r, warning=FALSE, fig.width=10, fig.height=10}
+pred <- make_pred(naive_bayes, selected_features)
 kable(table(test_set[, target], pred))
-lime_plot(naive_bayes, features, pred)
+lime_plot(naive_bayes, selected_features, pred)
 ```
 
 ## Logistic Regression
@@ -441,7 +439,7 @@ lime_plot(naive_bayes, features, pred)
 Logistic regression can be used to classify a variable dependent on one or more independent features. LR will find the best fitting model to describe the relationship between the dependent and the independent variables. We will be using binomial type LR, as the target variable can only have two possible types - High.Income or not. 
 
 ```{r, warning=FALSE}
-probability_columns <- grep("_pred", names(training_set))
+probability_columns <- paste(selected_features, "_pred", sep = "")
 logistic_regression <- caret::train(
   x = training_set[probability_columns],
   y = as.factor(training_set[, target]),
@@ -454,7 +452,7 @@ logistic_regression <- caret::train(
 evaluate_model(logistic_regression, probability_columns)
 ```
 
-```{r, warning=FALSE, fig.width=10, fig.height=20}
+```{r, warning=FALSE, fig.width=10, fig.height=10}
 pred <- make_pred(logistic_regression, probability_columns)
 kable(table(test_set[, target], pred))
 lime_plot(logistic_regression, probability_columns, pred)
