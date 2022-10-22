@@ -134,17 +134,14 @@ paste(
 
 ## Feature Variables
 
-Next we need to select the feature variables that will act as predictors of the target variable, High.Income. All variables left after data cleaning could potentially influence the job posting salary. We are looking for independent variables that could affect salary. 
-
-Company.Sector is dependent on Company.Industry. Job.Location is dependent on State. Possibly only one of these is needed, this will be clear in the classification problem.
-
-Identify the numerical and categorical feature variables:
+Identify the numerical and categorical feature variables.
 
 ```{r}
 features <- setdiff(colnames(df), target)
 
+df[sapply(df, is.character)] <- lapply(df[sapply(df, is.character)], as.factor)
 categorical_variables <- features[
-  sapply(df[, features], class) %in% c("factor", "character", "logical")
+  sapply(df[, features], class) %in% c("factor", "logical")
 ]
 numerical_variables <- features[
   sapply(df[, features], class) %in% "numeric"
@@ -182,7 +179,7 @@ for (variable in numerical_variables) {
 }
 ```
 
-## Test and Training Sets 
+## Test and Training Sets
 
 Perform a 80/20 random split on the dataset to get a training and test set.
 
@@ -202,20 +199,17 @@ paste(
 
 ## Null model
 
-Firstly, we will compute a null model. The null model will always return the the majority category. As mentioned earlier, the dataset is almost balanced so the model will have a 50% chance of predicting High.Income (`TRUE`), resulting in an Area Under the Curve (AUC) of 0.5. 
-
-Calc_auc is a formula that calculates the AUC of a model based on the predictor and target. 
+The null model will always return the the majority category. As mentioned earlier, the dataset is almost balanced so the model will have a 50% chance of predicting `High.Income (TRUE)`, resulting in an Area Under the Curve (AUC) of 0.5.
 
 ```{r}
 calc_auc <- function(pred_col, out_col) {
   as.numeric(performance(prediction(pred_col, out_col), "auc")@y.values)
 }
+
 log_likelihood <- function(ypred, ytrue) {
   sum(ifelse(ytrue, log(ypred), log(1 - ypred)))
 }
-```
 
-```{r}
 null_model <- sum(training_set[target]) / nrow(training_set)
 (calc_auc(rep(null_model, nrow(test_set)), test_set[target]))
 (log_likelihood(null_model, training_set[, target]))
@@ -250,7 +244,7 @@ cross_validation_100_fold <- function(variable) {
 }
 ```
 
-Find the average auc for each variable over 100 fold cross validation and print out the ones over 0.65.
+Find the average AUC for each variable over 100 fold cross validation and print out the ones over 0.65.
 
 ```{r}
 selected_features <- c()
@@ -347,38 +341,53 @@ roc_plot(title_pred, test_set[, target], "blue", TRUE)
 ```{r}
 lime_plot <- function(model, features, pred) {
   test_cases <- c()
+
+  # True Positive
   for (i in seq(length(pred))) {
     if (test_set[i, target] && pred[i]) {
       test_cases <- c(test_cases, i)
       break
     }
   }
+
+  # False Positive
   for (i in seq(length(pred))) {
     if (test_set[i, target] && !pred[i]) {
       test_cases <- c(test_cases, i)
       break
     }
   }
+
+  # True Negative
   for (i in seq(length(pred))) {
     if (!test_set[i, target] && !pred[i]) {
       test_cases <- c(test_cases, i)
       break
     }
   }
+
+  # False Negative
   for (i in seq(length(pred))) {
     if (!test_set[i, target] && pred[i]) {
       test_cases <- c(test_cases, i)
       break
     }
   }
+
+  example <- test_set[test_cases, features]
   explainer <- lime(
     training_set[features],
     model = model,
     bin_continuous = TRUE,
     n_bins = 10
   )
-  example <- test_set[test_cases, features]
-  explanation <- explain(example, explainer, n_labels = 1, n_features = length(features))
+
+  explanation <- explain(
+    example,
+    explainer,
+    n_labels = 1,
+    n_features = length(features)
+  )
   plot_features(explanation)
 }
 ```
@@ -432,7 +441,7 @@ lime_plot(naive_bayes, selected_features, pred)
 
 ## Logistic Regression
 
-Logistic regression can be used to classify a variable dependent on one or more independent features. LR will find the best fitting model to describe the relationship between the dependent and the independent variables. We will be using binomial type LR, as the target variable can only have two possible types - High.Income or not. 
+Logistic regression can be used to classify a variable dependent on one or more independent features. It will find the best fitting model to describe the relationship between the dependent and the independent variables. As the target variable can only have two possible types - High.Income or not. We will be using binomial type LR,  
 
 ```{r, warning=FALSE}
 probability_columns <- paste(selected_features, "_pred", sep = "")
