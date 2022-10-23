@@ -208,13 +208,19 @@ calc_auc <- function(pred_col, out_col) {
   as.numeric(performance(prediction(pred_col, out_col), "auc")@y.values)
 }
 
-log_likelihood <- function(ypred, ytrue) {
+calc_log_likelihood <- function(ypred, ytrue) {
+  ypred <- ypred[ypred > 0 & ypred < 1]
   sum(ifelse(ytrue, log(ypred), log(1 - ypred)))
 }
 
 null_model <- sum(training_set[target]) / nrow(training_set)
-(calc_auc(rep(null_model, nrow(test_set)), test_set[target]))
-(log_likelihood(null_model, training_set[, target]))
+model_evaluations <- data.frame(
+  Model.Name = "Null Model",
+  Model.Type = "univariate",
+  AUC = calc_auc(rep(null_model, nrow(test_set)), test_set[target]),
+  Log.Likelihood = calc_log_likelihood(null_model, test_set[, target])
+)
+kable(model_evaluations)
 ```
 
 ## Single Variable Model
@@ -280,10 +286,23 @@ company_pred <- single_variable_prediction(
   training_set[, target],
   test_set$Company
 )
+model_evaluations[nrow(model_evaluations) + 1, ] <- c(
+  "Company",
+  "univariate",
+  calc_auc(company_pred, test_set[target]),
+  calc_log_likelihood(company_pred, test_set[, target])
+)
+
 title_pred <- single_variable_prediction(
   training_set$Job.Title,
   training_set[, target],
   test_set$Job.Title
+)
+model_evaluations[nrow(model_evaluations) + 1, ] <- c(
+  "Job.Title",
+  "univariate",
+  calc_auc(title_pred, test_set[target]),
+  calc_log_likelihood(title_pred, test_set[, target])
 )
 ```
 
@@ -299,26 +318,26 @@ double_density_plot <- function(
     High.Income = output_col
   )) +
     geom_density(aes(x = pred, colour = High.Income)) +
-    labs(x = x, y = y)
+    labs(x = paste("Predicated Probability of", x), y = y)
 }
 grid.arrange(
   double_density_plot(
     company_pred,
     test_set[target],
-    "Company Industry",
+    "Company",
     "density"
   ),
   double_density_plot(
     title_pred,
     test_set[target],
-    "Friend Recommendation",
+    "Job Title",
     ""
   ),
   ncol = 2
 )
 ```
 
-```{r, fig.asp=1, out.width="50%"}
+```{r, fig.width=5, fig.height=5}
 roc_plot <- function(pred_col, out_col, colour = "red", overlaid = FALSE) {
   par(new = overlaid)
   plot(
@@ -327,15 +346,17 @@ roc_plot <- function(pred_col, out_col, colour = "red", overlaid = FALSE) {
     legend = FALSE,
     YIndex = FALSE
   )
-  legend(
-    "bottomright",
-    col = c("orange", "blue"),
-    c("Job Title", "Company"),
-    lwd = 2
-  )
 }
+
 roc_plot(company_pred, test_set[, target], "orange")
 roc_plot(title_pred, test_set[, target], "blue", TRUE)
+
+legend(
+  "bottomright",
+  col = c("orange", "blue"),
+  c("Job Title", "Company"),
+  lwd = 2
+)
 ```
 
 ## Model Evaluation
@@ -395,21 +416,34 @@ lime_plot <- function(model, features, pred) {
 ```
 
 ```{r}
-evaluate_model <- function(model, features) {
+evaluate_model <- function(model, features, name) {
   pred <- predict(
     model,
     test_set[features],
     "prob"
   )[2]
   pred <- unlist(pred)
-  print(calc_auc(pred, test_set[target]))
-  roc_plot(pred, test_set[, target])
-  double_density_plot(
+
+  auc <- calc_auc(pred, test_set[target])
+  log_likelihood <- calc_log_likelihood(pred, test_set[, target])
+  print(paste("AUC:", auc))
+  print(paste("Log Likelihood:", log_likelihood))
+
+  model_evaluations[nrow(model_evaluations) + 1, ] <- c(
+    name,
+    "multivariate",
+    auc,
+    log_likelihood
+  )
+  assign("model_evaluations", model_evaluations, envir = .GlobalEnv)
+
+  plot(double_density_plot(
     pred,
     test_set[target],
-    "Naive Bayes",
-    "density"
-  )
+    name,
+    "Density"
+  ))
+  pred
 }
 
 make_pred <- function(model, features) {
@@ -431,11 +465,15 @@ naive_bayes <- caret::train(
 )
 ```
 
-```{r, warning=FALSE, out.width="50%"}
-evaluate_model(naive_bayes, selected_features)
+```{r, warning=FALSE, fig.width=5, fig.height=3}
+naive_bayes_pred <- evaluate_model(
+  naive_bayes,
+  selected_features,
+  "Naive Bayes"
+)
 ```
 
-```{r, warning=FALSE, fig.width=10, fig.height=10}
+```{r, warning=FALSE, fig.width=12, fig.height=8}
 pred <- make_pred(naive_bayes, selected_features)
 kable(table(test_set[, target], pred))
 lime_plot(naive_bayes, selected_features, pred)
@@ -443,7 +481,7 @@ lime_plot(naive_bayes, selected_features, pred)
 
 ## Logistic Regression
 
-Logistic regression can be used to classify a variable dependent on one or more independent features. It will find the best fitting model to describe the relationship between the dependent and the independent variables. As the target variable can only have two possible types - High.Income or not. We will be using binomial type LR,  
+Logistic regression can be used to classify a variable dependent on one or more independent features. It will find the best fitting model to describe the relationship between the dependent and the independent variables. As it is a binary classification task `binomial` distribution is used.
 
 ```{r, warning=FALSE}
 probability_columns <- paste(selected_features, "_pred", sep = "")
@@ -455,11 +493,15 @@ logistic_regression <- caret::train(
 )
 ```
 
-```{r, warning=FALSE, out.width="50%"}
-evaluate_model(logistic_regression, probability_columns)
+```{r, warning=FALSE, fig.width=5, fig.height=3}
+logistic_regression_pred <- evaluate_model(
+  logistic_regression,
+  probability_columns,
+  "Logistic Regression"
+)
 ```
 
-```{r, warning=FALSE, fig.width=10, fig.height=10}
+```{r, warning=FALSE, fig.width=12, fig.height=8}
 pred <- make_pred(logistic_regression, probability_columns)
 kable(table(test_set[, target], pred))
 lime_plot(logistic_regression, probability_columns, pred)
@@ -575,28 +617,24 @@ dend_classes9.fp = as.data.frame( dend_classes9 ) %>%
 conf = xtabs( ~ cluster + max_clust, dend_classes9.fp )
 conf
 
-```
- 
- Here we can see the split of observations per class 
+The top 2 highest performing single model variables `Job.Title` and `Company` are also indicated as the 2 most significant variables shown under the *Coefficients* part of the summary as their p-value are much smaller than others.
  
 ### Principal Component Analysis 
 
-```{r}
+## Comparison
 
-PCA <- prcomp(scaled_df) # Calculate the principal components of scaled_df
-PCA
+```{r, fig.width=5, fig.height=5}
+kable(model_evaluations)
 
-eigvals = PCA$sdev ** 2
-eigvecs = PCA$rotation
+roc_plot(naive_bayes_pred, test_set[, target], "orange")
+roc_plot(logistic_regression_pred, test_set[, target], "blue", TRUE)
 
-#Cumulative Contribution to Total Variance 
-qplot(c(1:10), cumsum(eigvals)/sum(eigvals)*100) + 
-  geom_line() + 
-  xlab("Index") + 
-  ylab("Cumulative Contribution") +
-  ggtitle("Cumulative Contribution to Total Variance") +
-  ylim(0, 100)
-
+legend(
+  "bottomright",
+  col = c("orange", "blue"),
+  c("Naive Bayes", "Logistic Regression"),
+  lwd = 2
+)
 ```
 
 ```{r}
