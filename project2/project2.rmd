@@ -542,48 +542,39 @@ legend(
 
 # Clustering 
 
-The goal of clustering is to discover similarities among subsets of the data. 
-Set the dataframe to be used in clustering. We are investigating the clustering of numerical and integer variables, that is the variables reporting on the job pay and ratings.
+The goal of clustering is to discover similarities among subsets of our data. Given we have demonstrated a binary classification, it will interesting to see the dataset forms clusters around the salary of the job posting. To do so we will investigate the clustering of numerical and integer variables, that is the variables reporting on the job pay and job rating.
 
 ```{r}
-
-clust_df = df
-head(clust_df)
-
 num_var <- colnames(df[
-  sapply(df, class) %in% c("numeric", "integer")
-])
+  sapply(df, class) %in% c("numeric", "integer")])
 
+head(df[,num_var])
 ```
 
-Next, standardize the variables to ensure the disparity in scale does not adversely affect clustering 
+We standardize the variables to ensure the disparity in scale does not adversely affect clustering:
 
 ```{r}
-scaled_df <- scale(clust_df[,num_var])
+scaled_df <- scale(df[,num_var])
 head(scaled_df)
 ```
 
 ## Hierarchial Clustering
 
-Here we perform hierarchial clustering to explore possible splits in our data. We use the distance metric of euclidean distance, and investigate six different linkage methods; Single, Centroid, Complete, Average, Ward.D, and Ward.D2. For each method, a dendrogram, illustrating the nested clusters, is plotted. 
+Here we perform hierarchical clustering to explore possible splits in our data. While we previously performed a binary classification, we wish to explore all possible partitions of our data, and thus chose Hierarchical over K-Means. We use the distance metric of euclidean distance, and investigate four popular different linkage methods; Single, Complete, Average, and Ward.D2. For each method, a dendrogram, illustrating the nested clusters, is plotted. 
 
 ```{r}
 
-# Fristly, calculate the distance between each observation
+# Firstly, calculate the distance between each observation
 dist_matrix <-  dist(scaled_df, method = "euclidean")
 
 # Next, perform hierarchical cluster on the distance matrix trying different linkage methods. 
 # Plot the dendrogram for each linkage
 
-par(mfrow=c(2,3))
+par(mfrow=c(2,2))
 
 # Single Linkage 
 clust_single <-  hclust(dist_matrix, method <- "single")
 plot(clust_single, labels=FALSE, main="Single Linkage")
-
-# Centroid Linkage 
-clust_cent <-  hclust(dist_matrix, method <- "centroid")
-plot(clust_cent,labels=FALSE, main="Centroid Linkage")
 
 # Complete Linkage
 clust_complete <-  hclust(dist_matrix, method <- "complete")
@@ -593,23 +584,20 @@ plot(clust_complete, labels=FALSE, main="Complete Linkage")
 clust_average <-  hclust(dist_matrix, method <- "average")
 plot(clust_average, labels=FALSE, main="Average Linkage")
 
-# Ward D Linkage
-clust_wardD<-  hclust(dist_matrix, method <- "ward.D")
-plot(clust_wardD,labels=FALSE, main="Ward.D Linkage")
-
 # Ward D2 Linkage 
-clust_wardD2 <-  hclust(dist_matrix, method <- "ward.D2")
-plot(clust_wardD2,labels=FALSE, main="Ward.D2 Linkage")
+clust_wardD22 <-  hclust(dist_matrix, method <- "ward.D2")
+plot(clust_wardD22,labels=FALSE, main="Ward.D2 Linkage")
 
 ```
-As evident above, the linkage method has a significant impact on the type of clusters formed. The single linkage is best for detecting outliers, but does not perform well for a large number of observations and levels. Complete measures the distance between the two most distance points, and therefore produces tighter clusters. Average linkage is similar to complete linkage but also assists in detection of outliers. Finally, both Ward.D and Ward.D2 minimize the within cluster variance by combining clusters according to the smallest between cluster distance, and therefor produce compact clusters. In particular, Ward.D2 squares the differences identified in Ward.D, thereby making clusters easier to differentiate. For the purposes of this assignment Ward.D2 will be used.
+
+As evident above, the linkage method has a significant impact on the type of clusters formed. The single linkage is best for detecting outliers, but does not perform well for a large number of observations and levels. Complete measures the distance between the two most distance points, and therefore produces tighter clusters. Average linkage is similar to complete linkage but also assists in detection of outliers. Finally, Ward.D2 minimizes the within cluster variance by combining clusters according to the smallest between cluster distance, and therefore produce compact clusters that are easily differential. For the purposes of this assignment Ward.D2 will be used.
 
 We can cut the Ward.D2 dendrogram at different heights to return the cluster sizes. Here we show the distribution of observations for 1-9 clusters 
 
 ```{r}
 
 # Cutree gives clusters at different cluster levels in a table 
-dend_classes = cutree(clust_wardD, k = 1:9) 
+dend_classes = cutree(clust_wardD2, k = 1:9) 
 
 # Number of observations in each class
 dend_classes9.fp = as.data.frame( dend_classes9 ) %>%
@@ -630,6 +618,7 @@ The table above indicates the distribution of observations at cluster levels 1-9
 To determine the optimal number of clusters for our dataset we should consider the total Within Sum of Squares (WSS) and the Calinski-Harabasz index (CH index). An optimal number of clusters is defined such that WSS is minimized and the CH-Index is maximized; that is, there is limited variance within clusters and large variance between clusters.  
 
 The functions below are used to calculate the WSS and CH-Index for different cluster levels. 
+
 ```{r}
 
 # Function to return the squared Euclidean distance of two given points x and y
@@ -690,6 +679,7 @@ CH_index <- function(scaled_df, kmax, method="kmeans") {
 ```
 
 Plot the CH-Index and WSS across different k values to visualize the optimal cluster number.
+
 ```{r}
 # calculate the CH criterion
 crit.df <- CH_index(scaled_df, 10, method="hclust")
@@ -708,35 +698,10 @@ fig2 <- ggplot(crit.df, aes(x=k, y=WSS), color="blue") +
 
 grid.arrange(fig1, fig2, nrow=1)
 ```
-As evident in the graph above, the data's CH index is maximised at 2 clusters, whereas the WSS is minimized at 10. We usually consider the 'elbow', the point at which the rate of change of WSS slows down, to be a reasonable estimate as for the optimal number of clusters. For the graph above, the elbow appears to be at 4-5. This corresponds to a 'almost' local maximum in the CH-index. Thus, five clusters seem to be a good choice to maximise the distance between clusters and minimize the variability within clusters.  
 
-### Validating our Clusters
+As evident in the graph above, the data's CH index is maximized at 2 clusters, whereas the WSS is minimized at 10. We usually consider the 'elbow', the point at which the rate of change of WSS slows down, to be a reasonable estimate of the optimal number of clusters. For the graph above, the elbow appears to be at 4-5. This corresponds to an 'almost' local maximum in the CH-index. Thus, five clusters seem to be a good choice to maximize the distance between clusters and minimize the variability within clusters.  
 
-We should assess if five clusters represent true variations in our dataset. Clusterboot() uses boostrap sampling to evaluate how stable a given cluster is. 
-
-```{r}
-n_clust <- 5
-cboot.hclust <-  clusterboot(scaled_df, clustermethod = hclustCBI, method="ward.D", k=n_clust)
-clusters.cboot <- cboot.hclust$result$partition
-```
-
-To determine stability, consider how many times the four clusters were dissolved during clusterboot. The code below returns 1 - % of times, and therefore a number close to 1 indicates high stability whereas a lower number indicates low stability 
-
-```{r}
-cluster_number <- c(1,2,3,4,5)
-stability <- c(values <- 1 - cboot.hclust$bootbrd/100) 
-
-clus_stab <- data.frame(cluster_number,stability)
-clus_stab
-```
-
-As evident in the table above, all five clusters are very stable with values very close to 1. Cluster 4, in particular, is very indicative of pattern in our dataset. 
-
-We can additionally analysis the cluster distribution by looking the the mean of each cluster's variables, and by plotting the convex hull. 
-
-```{r}
-aggregate(clust_df[,num_var], by=list(cluster=clust_df$cluster), mean)
-```
+Moreover, we can visualize the distribution of observations within the clusters to confirm if 5 clusters is a good choice.
 
 ```{r}
 
@@ -759,7 +724,7 @@ hclust.hull <- find_convex_hull(hclust.project2D, clusters)
 fig <- c()
 kvalues <- seq(2,5)
 for (k in kvalues) {
-  clusters <- cutree(clust_wardD, k)
+  clusters <- cutree(clust_wardD2, k)
   hclust.project2D <- cbind(project2D, cluster=as.factor(clusters), salary=df$Estimate.Base.Salary)
   hclust.hull <- find_convex_hull(hclust.project2D, clusters)
   assign(paste0("fig", k),
@@ -773,6 +738,34 @@ for (k in kvalues) {
 }
 grid.arrange(fig2, fig3, fig4, fig5, nrow=2, top = textGrob("Cluster Distribution for k=2-5",gp=gpar(fontsize=20,font=3)))
 ```
+As evident in the figure above, the data is first split into two distinct clusters, one of which (red) demonstrates significant variability. 
+
+### Validating our Clusters
+
+We should assess if five clusters represent true variations in our dataset. Clusterboot() uses boostrap sampling to evaluate how stable a given cluster is. 
+
+```{r}
+n_clust <- 5
+cboot.hclust <-  clusterboot(scaled_df, clustermethod = hclustCBI, method="ward.D2", k=n_clust)
+clusters.cboot <- cboot.hclust$result$partition
+```
+
+To determine stability, consider how many times the four clusters were dissolved during clusterboot. The code below returns 1 - % of times, and therefore a number close to 1 indicates high stability whereas a lower number indicates low stability 
+
+```{r}
+cluster_number <- c(1,2,3,4,5)
+stability <- c(values <- 1 - cboot.hclust$bootbrd/100) 
+
+clus_stab <- data.frame(cluster_number,stability)
+clus_stab
+```
+
+As evident in the table above, all clusters 4 and 5 are stable with stability values of 1 and 0.85 respectively. Cluster 2, on the other hand, is not stable.
+
+```{r}
+aggregate(df[,num_var], by=list(cluster=df$cluster), mean)
+```
+
 ### Exploring the Clusters 
 
 From here on out we work with five clusters to explore the patterns they represent in our data. First append the cluster number to the original dataset.  
@@ -780,29 +773,32 @@ From here on out we work with five clusters to explore the patterns they represe
 ```{r}
 # Cut the dendrogram to form 5 clusters
 n_clust = 5
-clusters <- cutree(clust_wardD, n_clust)
-clust_df$cluster <- as.factor(clusters)
+clusters <- cutree(clust_wardD2, n_clust)
+df$cluster <- as.factor(clusters)
 ```
 
-We will first consider the locations of the jobs from each cluster
+We will first consider the locations of the jobs from each cluster.
+
 ```{r}
-ggplot(clust_df, aes(cluster, fill=State)) + 
+ggplot(df, aes(cluster, fill=State)) + 
   geom_bar(position="fill")
 ```
+
 As seen in the filled bar chart above, there is no distinct pattern to be found between the clusters and job location. 
 
-Next we can consider the pay, and see if the clusters form around this. 
+Next we can consider the salary, and see if the clusters form around this. 
+
 ```{r}
-ggplot(clust_df, aes(Estimate.Base.Salary, fill=cluster)) + 
+ggplot(df, aes(Estimate.Base.Salary, fill=cluster)) + 
   geom_histogram()
 ```
-Cluster 1 is the largest and covers salaries less than \$126,086. Cluster 2 predominantly covers salaries greater than \$120,000. There is some overlap between the cluster 1 and 2, but for the most part they seperate the data into a 'high' and 'low' salary. However, clusters 3,4,5 overlap greately with cluster 1 with no clear pattern. 
+Cluster 1 is the largest and covers salaries less than \$108,000. Cluster 5 predominantly covers salaries greater than than \$108,000 but less than \$170,000. Cluster 3 covers the high-end salaries greater \$170,000. There is some overlap between these three segments and clusters 2 and 4, but for the most part the figure above demonstrates a separation of data into 'high', 'middle', and 'low' salaries. The lack of a clear pattern for cluster 2 makes sense, given it's low stability of 0.33, but it is interesting that cluster 4, which had a stability of 1, does not demonstrate any clear relationship with the salary. 
 
-It is also worthwhile plotting the Company.Rating vs. Estimate.Base.Salary by cluster group. 
+As such, we investigate if other numerical variables used in classification, the ratings, have any relationships with the clusters formed. The code below plots the Company.Rating vs. Estimate.Base.Salary by cluster group. 
+
 ```{r}
-ggplot(clust_df, aes(Company.Rating, Estimate.Base.Salary, colour = factor( cluster ) ) ) + geom_point()
+ggplot(df, aes(Company.Rating, Estimate.Base.Salary, colour = factor( cluster ) ) ) + geom_point()
 ```
-This plot clearly demonstrates the split between cluster 4, and the rest of the cluster. Recalling the analysis of stability, cluster 4 recieved a score of 1 which reflects the clear verticaln split in our data. Cluster 2, which was shown to be representive of a high salary is also representative of a high company rating. 
-
+As evident in the plot above,while cluster 4 is spread out over many possible salaries, it is actually reflective of a very low company rating, mainly a rating of 1. Cluster 2 is situated around higher company ratings, but as demonstrated through clusterboot(), this is not reflective of a true variation in the dataset. 
 
 
