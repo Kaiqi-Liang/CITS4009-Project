@@ -835,7 +835,7 @@ Now that the optimal number of clusters is found, use the 6 clusters to explore 
 
 ```{r}
 # Append the cluster number to the original dataset
-df$cluster <- as.factor(cutree(hc, 6))
+df$Cluster <- as.factor(cutree(hc, 6))
 ```
 
 ### Job Locations
@@ -845,7 +845,7 @@ Plot a filled bar chart to investigate whether each cluster tend to be in the sa
 ```{r}
 ggplot(df) +
   geom_bar(
-    aes(x = cluster, fill = State),
+    aes(x = Cluster, fill = State),
     alpha = 0.7,
     position = "fill"
   )
@@ -860,7 +860,7 @@ Plot a histogram to investigate whether the clusters form around around differen
 ```{r}
 ggplot(df) +
   geom_histogram(
-    aes(x = Estimate.Base.Salary, fill = cluster),
+    aes(x = Estimate.Base.Salary, fill = Cluster),
     binwidth = 8000,
     alpha = 0.7
   ) +
@@ -886,7 +886,7 @@ ggplot(df) +
     aes(
       x = Company.Rating,
       y = Estimate.Base.Salary,
-      colour = cluster
+      colour = Cluster
     ),
     alpha = 0.7
   ) +
