@@ -822,7 +822,11 @@ Plot a filled bar chart to investigate whether each cluster tend to be in the sa
 
 ```{r}
 ggplot(df) +
-  geom_bar(aes(x = cluster, fill = State), position = "fill")
+  geom_bar(
+    aes(x = cluster, fill = State),
+    alpha = 0.7,
+    position = "fill"
+  )
 ```
 
 Unfortunately there is no geographical pattern to be found in the clusters as all of the states have some percentage of data in each cluster and they are quite evenly spread out.
@@ -836,7 +840,7 @@ ggplot(df) +
   geom_histogram(
     aes(x = Estimate.Base.Salary, fill = cluster),
     binwidth = 8000,
-    alpha = 0.8
+    alpha = 0.7
   ) +
   scale_x_continuous(
     labels = scales::dollar_format(),
