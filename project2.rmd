@@ -41,6 +41,7 @@ library(knitr)
 library(grDevices)
 library(tidyverse)
 library(fpc)
+library(klaR)
 
 df <- read.csv(file = "AustraliaDataScienceJobs.csv", header = TRUE)
 ```
