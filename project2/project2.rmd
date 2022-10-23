@@ -572,37 +572,36 @@ Using the distance metric 'euclidean', output a dendrogram - a tree that represe
 # Fristly, calculate the distance between each observation
 dist_matrix <-  dist(scaled_df, method = "euclidean")
 
-# Next, perform hierarchical cluster on the distance matrix trying different linkage methods 
+# Next, perform hierarchical cluster on the distance matrix trying different linkage methods. 
+# Plot the dendrogram for each linkage
 
 n_clust = 4
+
+par(mfrow=c(2,3))
 
 # Single Linkage 
 clust_single <-  hclust(dist_matrix, method <- "single")
 plot(clust_single, labels=FALSE, main="Cluster Dendrogram for Single Linkage")
 
+# Ward D2 Linkage 
+clust_cent <-  hclust(dist_matrix, method <- "centroid")
+plot(clust_cent,labels=FALSE, main="Cluster Dendrogram for Centroid Linkage")
+
 # Complete Linkage
 clust_complete <-  hclust(dist_matrix, method <- "complete")
-c1 = plot(clust_complete, labels=FALSE, main="Cluster Dendrogram for Complete Linkage") 
+plot(clust_complete, labels=FALSE, main="Cluster Dendrogram for Complete Linkage") 
 
-# Averafe 
+# Average Linkage
 clust_average <-  hclust(dist_matrix, method <- "average")
+plot(clust_average, labels=FALSE, main="Cluster Dendrogram for Average Linkage")
 
-c2 = plot(clust_average, labels=FALSE, main="Cluster Dendrogram for Average Linkage")
-
-# Calculate the clusters
+# Ward D Linkage
 clust_wardD<-  hclust(dist_matrix, method <- "ward.D")
+plot(clust_wardD,labels=FALSE, main="Cluster Dendrogram for Ward.D Linkage")
 
-# Plot the dendrogram
-c3 = plot(clust_wardD,labels=FALSE, main="Cluster Dendrogram for Ward.D Linkage")
-
-# Calculate the clusters
+# Ward D2 Linkage 
 clust_wardD2 <-  hclust(dist_matrix, method <- "ward.D2")
-
-# Plot the dendrogram
-c4 = plot(clust_wardD2,labels=FALSE, main="Cluster Dendrogram for Ward.D2 Linkage")
-
-grid.arrange(c1, c2, c3, c4, nrow=1)
-
+plot(clust_wardD2,labels=FALSE, main="Cluster Dendrogram for Ward.D2 Linkage")
 
 ```
 
