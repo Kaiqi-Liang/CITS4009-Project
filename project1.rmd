@@ -38,7 +38,7 @@ df[df == ""] <- NA
 
 Code to allow truncating text output especially for `str()` and `head()` functions.
 
-```{r class.source="fold-hide"}
+```{r}
 # Save the built-in output hook
 hook_output <- knitr::knit_hooks$get("output")
 
