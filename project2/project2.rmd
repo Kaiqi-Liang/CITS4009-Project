@@ -27,6 +27,7 @@ if (!is.null(sessionInfo()$otherPkgs)) {
   invisible(
     lapply(paste0('package:', names(sessionInfo()$otherPkgs)),
            detach, character.only=TRUE, unload=TRUE))}
+set.seed(1)
 ```
 
 Load libraries and data.
@@ -127,8 +128,7 @@ paste(
   nrow(df[df[, target], ]),
   "high income observations. There are",
   nrow(df[!df[, target], ]),
-  "low income observations",
-  sep = " "
+  "low income observations"
 )
 ```
 
@@ -153,8 +153,7 @@ paste(
   "categorical features,",
   length(numerical_variables),
   "numerical features",
-  "and 1 target column.",
-  sep = " "
+  "and 1 target column."
 )
 ```
 
@@ -192,8 +191,7 @@ paste(
   "The training set has",
   nrow(training_set),
   "observations and the test set has",
-  nrow(test_set),
-  sep = " "
+  nrow(test_set)
 )
 ```
 
@@ -203,12 +201,12 @@ The null model will always return the the majority category. As mentioned earlie
 
 ```{r}
 calc_auc <- function(pred_col, out_col) {
-  as.numeric(performance(prediction(pred_col, out_col), "auc")@y.values)
+  round(as.numeric(performance(prediction(pred_col, out_col), "auc")@y.values), 3)
 }
 
 calc_log_likelihood <- function(ypred, ytrue) {
   ypred <- ypred[ypred > 0 & ypred < 1]
-  sum(ifelse(ytrue, log(ypred), log(1 - ypred)))
+  round(sum(ifelse(ytrue, log(ypred), log(1 - ypred))))
 }
 
 null_model <- sum(training_set[target]) / nrow(training_set)
@@ -253,13 +251,12 @@ cross_validation_100_fold <- function(variable) {
 Find the average AUC for each variable over 100 fold cross validation and print out the ones over 0.65.
 
 ```{r}
-selected_features <- c()
+single_variable_models <- data.frame(matrix(ncol = 2, nrow = 0))
+colnames(single_variable_models) <- c("Variable", "AUC")
 for (variable in c(numerical_to_categorical, categorical_variables)) {
   auc <- cross_validation_100_fold(variable)
-  if (auc > 0.6) {
-    print(sprintf("%s: %4.3f", variable, auc))
-    selected_features <- c(selected_features, variable)
-  }
+  single_variable_models[nrow(single_variable_models) + 1, ] <-
+    c(variable, auc)
 
   training_set[paste(variable, "pred", sep = "_")] <-
     single_variable_prediction(
@@ -274,6 +271,20 @@ for (variable in c(numerical_to_categorical, categorical_variables)) {
       test_set[, variable]
     )
 }
+
+single_variable_models <-
+  single_variable_models[
+    single_variable_models$AUC > 0.6,
+  ]
+selected_features <- single_variable_models$Variable
+
+selected_models <-
+  single_variable_models[
+    order(single_variable_models$AUC, decreasing = TRUE),
+  ]
+row.names(selected_models) <- NULL
+
+kable(selected_models)
 ```
 
 Pick the top 2 highest average AUC.
@@ -323,7 +334,7 @@ grid.arrange(
     company_pred,
     test_set[target],
     "Company",
-    "density"
+    "Density"
   ),
   double_density_plot(
     title_pred,
@@ -482,7 +493,7 @@ lime_plot(naive_bayes, selected_features, pred)
 Logistic regression can be used to classify a variable dependent on one or more independent features. It will find the best fitting model to describe the relationship between the dependent and the independent variables. As it is a binary classification task `binomial` distribution is used.
 
 ```{r, warning=FALSE}
-probability_columns <- paste(selected_features, "_pred", sep = "")
+probability_columns <- paste(selected_features, "pred", sep = "_")
 logistic_regression <- caret::train(
   x = training_set[probability_columns],
   y = as.factor(training_set[, target]),
