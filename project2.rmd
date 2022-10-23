@@ -320,7 +320,7 @@ for (variable in c(numerical_to_categorical, categorical_variables)) {
 }
 ```
 
-Select the variables with an average AUC higher than 0.6 to be the selected features used in model trainings later on.
+Select the variables with an average AUC higher than 0.6 to be the features used in model trainings later on.
 
 ```{r}
 selected_models <-
