@@ -14,9 +14,11 @@ output:
 ---
 
 # Introduction
+
 The dataset for this project is Australia's data science job listings for August 2022 which can be downloaded on [Kaggle](https://www.kaggle.com/datasets/nadzmiagthomas/australia-data-science-jobs). It was scrapped from [Glassdoor](https://www.glassdoor.com.au) which is a website where current and former employees anonymously review companies.
 
 # Setup
+
 Load libraries and data.
 
 ```{r, message=FALSE, warning=FALSE}
@@ -37,15 +39,15 @@ df[df == ""] <- NA
 Code to allow truncating text output especially for `str()` and `head()` functions.
 
 ```{r class.source="fold-hide"}
-# save the built-in output hook
+# Save the built-in output hook
 hook_output <- knitr::knit_hooks$get("output")
 
-# set a new output hook to truncate text output
+# Set a new output hook to truncate text output
 knitr::knit_hooks$set(output = function(x, options) {
   if (!is.null(n <- options$out.lines)) {
     x <- xfun::split_lines(x)
     if (length(x) > n) {
-      # truncate the output
+      # Truncate the output
       x <- c(head(x, n), "....\n")
     }
     x <- paste(x, collapse = "\n")
@@ -79,7 +81,9 @@ custom_theme <- function(
 ```
 
 # Data Cleaning and Transformation
+
 ## Data Exploratory, Cleaning 
+
 Use `str()` to have a glance at the data.
 
 ```{r, out.lines=30}
@@ -89,6 +93,7 @@ str(df)
 There are 2088 observations of 53 variables.
 
 ## Renaming Variables
+
 There are a couple typos in the variable names let's fix that first, and some of them are very verbose which we can simplify.
 
 ```{r}
@@ -103,6 +108,7 @@ df <- rename(df,
 ```
 
 ## Dropping Columns
+
 The variable `Country` should be all `Australia` because this is an Australia's data science jobs dataset, all the job listings should be in Australia, otherwise it is not valid.
 
 ```{r}
@@ -116,6 +122,7 @@ df <- df[!names(df) %in% c("Country", "Job.Descriptions", "Url")]
 ```
 
 ## Type Conversion
+
 All the variables that end with `_yn` contain only `1`s and `0`s which should be converted to `logical`.
 
 ```{r}
@@ -134,6 +141,7 @@ head(df, 3)
 Looking much cleaner now.
 
 ## Missing Values
+
 Count the missing values in each variable.
 
 ```{r}
@@ -238,7 +246,9 @@ count_missing()
 Finally there are no more missing values.
 
 # Visualisation
+
 ## Job Locations
+
 ```{r}
 df_locations <- as.data.frame(table(df$Job.Location))
 colnames(df_locations) <- c("Location", "Number.of.Jobs")
@@ -316,6 +326,7 @@ ggplot(merge(sf_oz, jobs, all.x = TRUE)) +
 ```
 
 ## Company
+
 ```{r, out.width="65%"}
 df_companies <- as.data.frame(table(df$Company))
 colnames(df_companies) <- c("Company", "Number.of.Jobs")
@@ -424,6 +435,7 @@ ggplot(df[df$Company.Sector != "Unknown", ]) +
 Plotting `Company Type` against `Company Sector`. Some make perfect sense for example all `College / University` are in `Education` and all `Hospital` are in `Healthcare`. Some are more interesting to look at like `Public` and `Private` as we can see they both have a big focus on `Finance` and `Information Technology` while `Public` companies also have an emphasis on `Pharmaceutical & Biotechnology` and `Private` companies are in `Human Resources & Staffing` sector where `Public` companies are not.
 
 ## Salary
+
 ```{r, out.width="50%"}
 salary_columns <- c("High.Estimate", "Estimate.Base.Salary", "Low.Estimate")
 df_salary <- stack(df[salary_columns])
@@ -492,6 +504,7 @@ ggplot(df, aes(x = Estimate.Base.Salary)) +
 ```
 
 ## Rating
+
 ```{r, out.width="50%", message=FALSE}
 ggplot(df, aes(x = Company.Rating, y = Estimate.Base.Salary)) +
   geom_point(colour = "darkgreen", shape = 23) +
@@ -505,7 +518,8 @@ There is a small trend as the higher rating the company receives the higher base
 ```{r, out.width="100%"}
 df_ratings <- df[rating_columns]
 
-# Replace dots with newlines so separate words are on different lines to fit in the scatter matrix
+# Replace dots with newlines so that separate words are on
+# different lines to fit in the scatter matrix
 colnames(df_ratings) <- gsub("\\.", "\n", rating_columns)
 
 pairs(df_ratings)
@@ -514,6 +528,7 @@ pairs(df_ratings)
 As suspected all the other criteria seem to be linearly correlated to the `Company Rating`, so the overall rating is more closely related to all the criteria than salary, ie. high salary does not necessarily give the company a good rating.
 
 ## Skill
+
 ```{r, out.width="50%", fig.height=3}
 javascript_r <- ggplot(
   count(df, javascript_yn, r_yn),

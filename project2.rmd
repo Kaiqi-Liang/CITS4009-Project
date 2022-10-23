@@ -32,7 +32,6 @@ Load libraries and data.
 library(dplyr)
 library(ROCR)
 library(ggplot2)
-library(grid)
 library(gridExtra)
 library(ROCit)
 library(caret)
@@ -51,8 +50,10 @@ df <- read.csv(file = "AustraliaDataScienceJobs.csv", header = TRUE)
 Firstly, clean the dataset and remove or impute missing values.
 
 ```{r}
+# Replace empty strings with NA
 df[df == ""] <- NA
 
+# Fix typos and shortern variable names
 df <- rename(df,
   Number.of.Rater = Companny.Number.of.Rater,
   Career.Opportunities = Company.Career.Opportinities,
@@ -61,10 +62,6 @@ df <- rename(df,
   Work.Life.Balance = Company.Work.Life.Balance,
   Friend.Recommendation = Company.Friend.Reccomendation
 )
-
-# Change the location Australia to Unknown as all the other locations are
-# cities other than countries.
-df$Job.Location[df$Job.Location == "Australia"] <- "Unknown"
 
 # Drop columns
 df <- df[!names(df) %in% c(
@@ -76,21 +73,14 @@ df <- df[!names(df) %in% c(
     "Number.of.Rater" # not valuable
 )]
 
-# Drop rows that contain NAs in either Job.Title or Company.Size
-df <- df[!is.na(df$Job.Title) & !is.na(df$Company.Size), ]
-
 # Convert _yn columns to logical
 skill_columns <- grep("_yn", names(df))
 df[skill_columns] <- sapply(df[skill_columns], function(col) {
   as.logical(col)
 })
 
-# Convert NAs to Unknown in Company Sector and Company Industry
-industry_column <- c("Company.Sector", "Company.Industry")
-df[industry_column] <- sapply(df[industry_column], function(column) {
-  column[is.na(column)] <- "Unknown"
-  column
-})
+# Drop rows that contain NAs in either Job.Title or Company.Size
+df <- df[!is.na(df$Job.Title) & !is.na(df$Company.Size), ]
 
 # Impute NAs with the median value in the rating columns
 rating_columns <- c(
@@ -107,6 +97,17 @@ df[rating_columns] <- sapply(df[rating_columns], function(column) {
   column[na] <- median(!na)
   column
 })
+
+# Convert NAs to Unknown in Company Sector and Company Industry
+industry_column <- c("Company.Sector", "Company.Industry")
+df[industry_column] <- sapply(df[industry_column], function(column) {
+  column[is.na(column)] <- "Unknown"
+  column
+})
+
+# Change the location Australia to Unknown as all the other locations are
+# cities other than countries.
+df$Job.Location[df$Job.Location == "Australia"] <- "Unknown"
 
 str(df)
 ```
