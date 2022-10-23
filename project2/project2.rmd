@@ -42,6 +42,8 @@ library(ROCit)
 library(caret)
 library(lime)
 library(knitr)
+library(grDevices)
+library(tidyverse)
 
 df <- read.csv(file = "AustraliaDataScienceJobs.csv", header = TRUE)
 ```
@@ -516,11 +518,119 @@ kable(table(test_set[, target], pred))
 lime_plot(logistic_regression, probability_columns, pred)
 ```
 
-The top 2 highest performing single model variables `Job.Title` and `Company` are also indicated as the 2 most significant variables shown under the *Coefficients* part of the summary as their p-value are much smaller than others.
-
 ```{r}
 summary(logistic_regression)
 ```
+
+# Clustering 
+
+The goal of clustering is to discover similarities among subsets of the data. 
+Set the dataframe to be used in clustering. We are investigating the clustering of numerical and integer variables, that is the variables reporting on the job pay and ratings.
+
+```{r}
+
+clust_df = df
+head(clust_df)
+
+num_var <- colnames(df[
+  sapply(df, class) %in% c("numeric", "integer")
+])
+
+```
+
+Next, standardize the variables to ensure the disparity in scale does not adversely affect clustering 
+
+```{r}
+scaled_df <- scale(clust_df[,num_var])
+head(scaled_df)
+```
+
+## Hierarchial Clustering
+
+We are using hierarchical clustering to explore the possible splits in our data. 
+
+Using the distance metric 'euclidean', output a dendrogram - a tree that represents nested clusters
+```{r}
+
+# Fristly, calculate the distance between each observation
+dist_matrix <-  dist(scaled_df, method = "euclidean")
+
+# Next, perform hierarchial cluster on the distance matrix trying different linkage methods 
+
+n_clust = 4
+
+# Single Linkage 
+clust1 <-  hclust(dist_matrix, method <- "single")
+
+plot(clust1, labels=FALSE, main="Cluster Dendrogram for Single Linkage")
+# rect.hclust(clust1, k=n_clust)
+
+# Calculate the clusters
+clust2 <-  hclust(dist_matrix, method <- "complete")
+
+plot(clust2, labels=FALSE, main="Cluster Dendrogram for Complete Linkage") 
+rect.hclust(clust2, k=n_clust)
+
+# Calculate the clusters
+clust3 <-  hclust(dist_matrix, method <- "average")
+
+plot(clust3, labels=FALSE, main="Cluster Dendrogram for Average Linkage")
+rect.hclust(clust3, k=n_clust)
+
+# Calculate the clusters
+clust4 <-  hclust(dist_matrix, method <- "ward.D")
+
+# Plot the dendrogram
+plot(clust4,labels=FALSE, main="Cluster Dendrogram for Ward.D Linkage")
+rect.hclust(clust4, k=n_clust)
+
+# Calculate the clusters
+clust4 <-  hclust(dist_matrix, method <- "ward.D2")
+
+# Plot the dendrogram
+plot(clust4,labels=FALSE, main="Cluster Dendrogram for Ward.D2 Linkage")
+rect.hclust(clust4, k=n_clust)
+
+
+```
+
+
+Cutree takes in a clustering model and returns a vector of cluster group assignments for each row. We specify the number of clusters by using k = 3
+```{r}
+# Cut the dendrogram to form 4 clusters
+clusters <- cutree(clust4, n_clust)
+
+# Function to print the clusters 
+print_clusters <- function(df, clusters, cols_to_print) {
+  n_clusters <- max(clusters)
+  for (i in 1:n_clusters) {
+    print(paste("cluster", i))
+    print(df[clusters == i, cols_to_print])
+  }
+}
+
+cols_to_print <- c('Company.Revenue', num_var)
+print_clusters(clust_df, clusters, cols_to_print)
+clust_df$cluster <- as.factor(clusters)
+```
+
+```{r}
+#gives clusters at different cluster levels in a table 
+dend_classes9 = cutree(clust4, k = 1:9) # cuts the tree at various levels to get maximum of k clusters
+
+#number of memeber
+dend_classes9.fp = as.data.frame( dend_classes9 ) %>%
+  pivot_longer(cols = 1:9,
+               names_to = "max_clust",
+               values_to = "cluster"
+               )
+
+conf = xtabs( ~ cluster + max_clust, dend_classes9.fp )
+conf
+
+The top 2 highest performing single model variables `Job.Title` and `Company` are also indicated as the 2 most significant variables shown under the *Coefficients* part of the summary as their p-value are much smaller than others.
+ 
+### Principal Component Analysis 
 
 ## Comparison
 
@@ -538,4 +648,262 @@ legend(
 )
 ```
 
-# Clustering
+```{r}
+# Focus on the first two principal components
+nComp <- 2 
+project2D <- as.data.frame(predict(PCA, newdata=scaled_df)[,1:nComp])
+project2D
+
+hclust.project2D <- cbind(project2D, cluster=as.factor(clusters), sector=df$Company.Sector)
+head(hclust.project2D)
+```
+
+Plot convex hull
+```{r}
+find_convex_hull <- function(proj2Ddf, clusters) {
+  do.call(rbind,
+    lapply(unique(clusters),
+      FUN = function(c) {
+        f <- subset(proj2Ddf, cluster==c);
+        f[chull(f),]
+      }
+      )
+    )
+  }
+hclust.hull <- find_convex_hull(hclust.project2D, clusters)
+```
+
+
+```{r}
+ggplot(hclust.project2D, aes(x=PC1, y=PC2)) +
+geom_point(aes(shape=cluster, color=cluster)) +
+# geom_text(aes(label=sector, color=cluster), hjust=0, vjust=1, size=3) +
+geom_polygon(data=hclust.hull, aes(group=cluster, fill=as.factor(cluster)),
+alpha=0.4, linetype=0) + theme(text=element_text(size=20))
+```
+
+
+### FINDING THE NUMBER OF CLUSTERS 
+
+The total within sum of squares (WSS) for different k values can help us to find the optimal number of clusters. The elbow of the curve indicates where the rate at which WSS slows down.
+
+Alternatively, the Calinski-Harabasz index (CH index) is another measure of cluster goodness.
+
+A good cluster has a small WSS (all the clusters are tight around their centres) and a large BSS (large seperation between clusters)
+
+CH = B/W
+
+Maximise CH index
+
+```{r}
+# Function to return the squared Euclidean distance of two given points x and y
+sqr_euDist <- function(x, y) {
+sum((x - y)^2)
+}
+# Function to calculate WSS of a cluster, represented as a n-by-d matrix
+# (where n and d are the numbers of rows and columns of the matrix)
+# which contains only points of the cluster.
+wss <- function(clustermat) {
+c0 <- colMeans(clustermat)
+sum(apply( clustermat, 1, FUN=function(row) {sqr_euDist(row, c0)} ))
+}
+# Function to calculate the total WSS. Argument `scaled_df`: data frame
+# with normalised numerical columns. Argument `labels`: vector containing
+# the cluster ID (starting at 1) for each row of the data frame.
+wss_total <- function(scaled_df, labels) {
+wss.sum <- 0
+k <- length(unique(labels))
+for (i in 1:k)
+wss.sum <- wss.sum + wss(subset(scaled_df, labels == i))
+wss.sum
+}
+
+# Function to calculate total sum of squared (TSS) distance of data
+# points about the (global) mean. This is the same as WSS when the
+# number of clusters (k) is 1.
+tss <- function(scaled_df) {
+wss(scaled_df)
+}
+
+# Function to return the CH indices computed using hierarchical
+# clustering (function `hclust`) or k-means clustering (`kmeans`)
+# for a vector of k values ranging from 1 to kmax.
+CH_index <- function(scaled_df, kmax, method="kmeans") {
+if (!(method %in% c("kmeans", "hclust")))
+stop("method must be one of c('kmeans', 'hclust')")
+npts <- nrow(scaled_df)
+wss.value <- numeric(kmax) # create a vector of numeric type
+# wss.value[1] stores the WSS value for k=1 (when all the
+# data points form 1 large cluster).
+wss.value[1] <- wss(scaled_df)
+if (method == "kmeans") {
+# kmeans
+for (k in 2:kmax) {
+clustering <- kmeans(scaled_df, k, nstart=10, iter.max=100)
+wss.value[k] <- clustering$tot.withinss
+}
+} else {
+# hclust
+d <- dist(scaled_df, method="euclidean")
+pfit <- hclust(d, method="ward.D2")
+for (k in 2:kmax) {
+labels <- cutree(pfit, k=k)
+wss.value[k] <- wss_total(scaled_df, labels)
+}
+}
+bss.value <- tss(scaled_df) - wss.value # this is a vector
+B <- bss.value / (0:(kmax-1)) # also a vector
+W <- wss.value / (npts - 1:kmax) # also a vector
+data.frame(k = 1:kmax, CH_index = B/W, WSS = wss.value)
+}
+```
+
+To plot the CH index vs k
+
+```{r}
+# calculate the CH criterion
+crit.df <- CH_index(scaled_df, 10, method="hclust")
+fig1 <- ggplot(crit.df, aes(x=k, y=CH_index)) +
+geom_point() + geom_line(colour="red") +
+scale_x_continuous(breaks=1:10, labels=1:10) +
+labs(y="CH index") + theme(text=element_text(size=20))
+fig2 <- ggplot(crit.df, aes(x=k, y=WSS), color="blue") +
+geom_point() + geom_line(colour="blue") +
+scale_x_continuous(breaks=1:10, labels=1:10) +
+theme(text=element_text(size=20))
+
+grid.arrange(fig1, fig2, nrow=1)
+```
+The CH index is maximised at 2 clusters, whereas the wss does not appears to a clear elbow. 
+Looking at the figure we can see that the CH criterion is maximized at k=2
+
+### Assess whether the cluster represents true structure 
+
+To see if the cluster holds up under plausible varations in the dataset use clusterboot(). Clusterboot() using bootstrap resampling to evaluate how stable a given cluster is
+
+```{r}
+library(fpc)
+
+n_clust = 4
+cboot.hclust <-  clusterboot(scaled_df, clustermethod = hclustCBI, method="ward.D2", k=n_clust)
+```
+
+
+```{r}
+# summary(cboot.hclust$result)
+clusters.cboot <- cboot.hclust$result$partition
+# print_clusters(df, clusters.cboot, "Company.Industry")
+```
+
+
+Count how many times each cluster was dissolved 
+
+```{r}
+# cboot.hclust$bootbrd = number of times a cluster is desolved.
+(values <- 1 - cboot.hclust$bootbrd/100) # large values here => highly stable
+## [1] 0.75 0.85 0.51 0.90 0.67
+cat("So clusters", order(values)[1], order(values)[3], "and", order(values)[4], "are highly stable")
+## So clusters 4 and 2 are highly stable
+```
+
+
+#KMEANS
+
+```{r}
+nclust <- 3
+# run kmeans with 5 clusters, 100 random starts, and 100
+# maximum iterations per run.
+km_clust <- kmeans(scaled_df, nclust, nstart=100, iter.max=100)
+km_clust$centers
+```
+
+```{r}
+kmClustering.ch <- kmeansruns(scaled_df, krange=1:10, criterion="ch")
+kmClustering.ch$bestk
+## [1] 2
+kmClustering.asw <- kmeansruns(scaled_df, krange=1:10, criterion="asw")
+kmClustering.asw$bestk
+## [1] 3
+# Compare the CH values for kmeans() and hclust().
+print("CH index from kmeans for k=1 to 10:")
+## [1] "CH index from kmeans for k=1 to 10:"
+print(kmClustering.ch$crit)
+## [1] 0.000000 14.094814 11.417985 10.418801 10.011797 9.964967 9.861682
+## [8] 9.412089 9.166676 9.075569
+print("CH index from hclust for k=1 to 10:")
+## [1] "CH index from hclust for k=1 to 10:"
+hclusting <- CH_index(scaled_df, 10, method="hclust")
+print(hclusting$CH_index)
+## [1] NaN 12.215107 10.359587 9.847229 10.011797 9.964967 9.552301
+## [8] 9.139594 8.873366 8.751161
+```
+
+```{r}
+kmCritframe <- data.frame(k=1:10, ch=kmClustering.ch$crit,
+asw=kmClustering.asw$crit)
+fig1 <- ggplot(kmCritframe, aes(x=k, y=ch)) +
+geom_point() + geom_line(colour="red") +
+scale_x_continuous(breaks=1:10, labels=1:10) +
+labs(y="CH index") + theme(text=element_text(size=20))
+fig2 <- ggplot(kmCritframe, aes(x=k, y=asw)) +
+geom_point() + geom_line(colour="blue") +
+scale_x_continuous(breaks=1:10, labels=1:10) +
+labs(y="ASW") + theme(text=element_text(size=20))
+grid.arrange(fig1, fig2, nrow=1)
+```
+
+```{r}
+fig <- c()
+kvalues <- seq(2,5)
+for (k in kvalues) {
+clusters <- kmeans(scaled_df, k, nstart=100, iter.max=100)$cluster
+kmclust.project2D <- cbind(project2D, cluster=as.factor(clusters),
+state=df$State)
+kmclust.hull <- find_convex_hull(kmclust.project2D, clusters)
+assign(paste0("fig", k),
+ggplot(kmclust.project2D, aes(x=PC1, y=PC2)) +
+geom_point(aes(shape=cluster, color=cluster, alpha=0.2)) +
+geom_polygon(data=kmclust.hull, aes(group=cluster, fill=cluster),
+alpha=0.4, linetype=0) +
+labs(title = sprintf("k = %d", k)) +
+theme(legend.position="none", text=element_text(size=20))
+)
+}
+grid.arrange(fig2, fig3, fig4, fig5, nrow=2)
+```
+
+### Analysing the clusters for patterns 
+
+We will first look into the locations of the jobs from each cluster
+```{r}
+
+
+ggplot(clust_df, aes(cluster, fill=State)) + 
+  geom_bar(position="fill")
+# 
+# clust_df$cluster
+# 
+# ggplot(df) +
+#   geom_polygon(data=map_data("Australia"), aes(x = long, y = lat, group = group), fill="#F0F0F0", colour = "lightgray")+
+#   geom_point(aes(x=longitude, y=latitude, color=cluster), alpha=0.5) +
+#   coord_quickmap() +
+#   cits4009_map_theme
+
+```
+As seen in the filled bar chart above, there is no distinct pattern to be found between the clusters and job location. 
+
+Next we can consider the pay, and see if the clusters form around this. 
+
+```{r}
+ggplot(clust_df, aes(Estimate.Base.Salary, fill=cluster)) + 
+  geom_histogram()
+```
+The histogram of estimate base salary, grouped by cluster shows evidence of patterns. 
+
+```{r}
+ggplot(clust_df, aes(Company.Rating, Estimate.Base.Salary, colour = factor( cluster ) ) ) + geom_point()
+```
+```{r}
+aggregate(clust_df[,num_var], by=list(cluster=clust_df$cluster), mean)
+```
+
