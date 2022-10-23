@@ -658,20 +658,20 @@ plot(clust_wardD2,labels=FALSE, main="Cluster Dendrogram for Ward.D2 Linkage")
 Cutree takes in a clustering model and returns a vector of cluster group assignments for each row. We specify the number of clusters by using k = 3
 ```{r}
 # Cut the dendrogram to form 4 clusters
-# clusters <- cutree(clust_wardD, n_clust)
+clusters <- cutree(clust_wardD, n_clust)
 
-# # Function to print the clusters 
-# print_clusters <- function(df, clusters, cols_to_print) {
-#   n_clusters <- max(clusters)
-#   for (i in 1:n_clusters) {
-#     print(paste("cluster", i))
-#     print(df[clusters == i, cols_to_print])
-#   }
-# }
+# Function to print the clusters 
+print_clusters <- function(df, clusters, cols_to_print) {
+  n_clusters <- max(clusters)
+  for (i in 1:n_clusters) {
+    print(paste("cluster", i))
+    print(df[clusters == i, cols_to_print])
+  }
+}
 
-# cols_to_print <- c('Company.Revenue', num_var)
-# print_clusters(clust_df, clusters, cols_to_print)
-# clust_df$cluster <- as.factor(clusters)
+cols_to_print <- c('Company.Revenue', num_var)
+print_clusters(clust_df, clusters, cols_to_print)
+clust_df$cluster <- as.factor(clusters)
 ```
 
 ```{r}
