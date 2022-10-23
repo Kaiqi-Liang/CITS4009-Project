@@ -518,8 +518,25 @@ kable(table(test_set[, target], pred))
 lime_plot(logistic_regression, probability_columns, pred)
 ```
 
+The top 2 highest performing single model variables `Job.Title` and `Company` are also indicated as the 2 most significant variables shown under the *Coefficients* part of the summary as their p-value are much smaller than others.
+
 ```{r}
 summary(logistic_regression)
+```
+
+## Comparison
+```{r, fig.width=5, fig.height=5}
+kable(model_evaluations)
+
+roc_plot(naive_bayes_pred, test_set[, target], "orange")
+roc_plot(logistic_regression_pred, test_set[, target], "blue", TRUE)
+
+legend(
+  "bottomright",
+  col = c("orange", "blue"),
+  c("Naive Bayes", "Logistic Regression"),
+  lwd = 2
+)
 ```
 
 # Clustering 
@@ -555,41 +572,36 @@ Using the distance metric 'euclidean', output a dendrogram - a tree that represe
 # Fristly, calculate the distance between each observation
 dist_matrix <-  dist(scaled_df, method = "euclidean")
 
-# Next, perform hierarchial cluster on the distance matrix trying different linkage methods 
+# Next, perform hierarchical cluster on the distance matrix trying different linkage methods 
 
 n_clust = 4
 
 # Single Linkage 
-clust1 <-  hclust(dist_matrix, method <- "single")
+clust_single <-  hclust(dist_matrix, method <- "single")
+plot(clust_single, labels=FALSE, main="Cluster Dendrogram for Single Linkage")
 
-plot(clust1, labels=FALSE, main="Cluster Dendrogram for Single Linkage")
-# rect.hclust(clust1, k=n_clust)
+# Complete Linkage
+clust_complete <-  hclust(dist_matrix, method <- "complete")
+c1 = plot(clust_complete, labels=FALSE, main="Cluster Dendrogram for Complete Linkage") 
 
-# Calculate the clusters
-clust2 <-  hclust(dist_matrix, method <- "complete")
+# Averafe 
+clust_average <-  hclust(dist_matrix, method <- "average")
 
-plot(clust2, labels=FALSE, main="Cluster Dendrogram for Complete Linkage") 
-rect.hclust(clust2, k=n_clust)
-
-# Calculate the clusters
-clust3 <-  hclust(dist_matrix, method <- "average")
-
-plot(clust3, labels=FALSE, main="Cluster Dendrogram for Average Linkage")
-rect.hclust(clust3, k=n_clust)
+c2 = plot(clust_average, labels=FALSE, main="Cluster Dendrogram for Average Linkage")
 
 # Calculate the clusters
-clust4 <-  hclust(dist_matrix, method <- "ward.D")
+clust_wardD<-  hclust(dist_matrix, method <- "ward.D")
 
 # Plot the dendrogram
-plot(clust4,labels=FALSE, main="Cluster Dendrogram for Ward.D Linkage")
-rect.hclust(clust4, k=n_clust)
+c3 = plot(clust_wardD,labels=FALSE, main="Cluster Dendrogram for Ward.D Linkage")
 
 # Calculate the clusters
-clust4 <-  hclust(dist_matrix, method <- "ward.D2")
+clust_wardD2 <-  hclust(dist_matrix, method <- "ward.D2")
 
 # Plot the dendrogram
-plot(clust4,labels=FALSE, main="Cluster Dendrogram for Ward.D2 Linkage")
-rect.hclust(clust4, k=n_clust)
+c4 = plot(clust_wardD2,labels=FALSE, main="Cluster Dendrogram for Ward.D2 Linkage")
+
+grid.arrange(c1, c2, c3, c4, nrow=1)
 
 
 ```
@@ -628,24 +640,26 @@ dend_classes9.fp = as.data.frame( dend_classes9 ) %>%
 conf = xtabs( ~ cluster + max_clust, dend_classes9.fp )
 conf
 
-The top 2 highest performing single model variables `Job.Title` and `Company` are also indicated as the 2 most significant variables shown under the *Coefficients* part of the summary as their p-value are much smaller than others.
- 
+```
+
 ### Principal Component Analysis 
 
-## Comparison
+```{r}
 
-```{r, fig.width=5, fig.height=5}
-kable(model_evaluations)
+PCA <- prcomp(scaled_df) # Calculate the principal components of scaled_df
+PCA
 
-roc_plot(naive_bayes_pred, test_set[, target], "orange")
-roc_plot(logistic_regression_pred, test_set[, target], "blue", TRUE)
+eigvals = PCA$sdev ** 2
+eigvecs = PCA$rotation
 
-legend(
-  "bottomright",
-  col = c("orange", "blue"),
-  c("Naive Bayes", "Logistic Regression"),
-  lwd = 2
-)
+#Cumulative Contribution to Total Variance 
+qplot(c(1:10), cumsum(eigvals)/sum(eigvals)*100) + 
+  geom_line() + 
+  xlab("Index") + 
+  ylab("Cumulative Contribution") +
+  ggtitle("Cumulative Contribution to Total Variance") +
+  ylim(0, 100)
+
 ```
 
 ```{r}
