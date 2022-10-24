@@ -1110,33 +1110,35 @@ Hierarchical Clustering is chosen over kMeans as there is no clear number of clu
 hc <- hclust(dist(clustering_df, method = "euclidean"), method = "ward.D2")
 ```
 
-Plot the dendrogram. It looks like a majority of the data tend to form a big cluster, even though forming 2 or 3 clusters both seem to be quite stable, the big cluster should be divided up as much as possible. Plotting the horizontal lines helps visualise the stability of different number of clusters and 6 seems to be the largest and stable choice.
+Plot the dendrogram. It looks like a majority of the data tend to form a big cluster, even though forming 2 or 3 clusters are highly stable, there is a big cluster which should be divided up as much as possible. Plotting the horizontal lines helps visualise the stability of different number of clusters, 7 or 8 seem to be the largest and still stable choice.
 
 ```{r, fig.width=12, fig.height=8}
 hcd <- as.dendrogram(hc)
 plot(hcd, ylab = "Height", leaflab = "none", horiz = FALSE)
+abline(h = 54, col = "red", lty = 2, lwd = 1.3)
 abline(h = 51.4, col = "red", lty = 2, lwd = 1.3)
-abline(h = 43.2, col = "red", lty = 2, lwd = 1.3)
-abline(h = 40.5, col = "red", lty = 2, lwd = 1.3)
-abline(h = 27.4, col = "red", lty = 2, lwd = 1.3)
-text(5, c(47, 41.9, 34), paste("k =", 4:6), col = "blue", cex = 0.7)
+abline(h = 45.9, col = "red", lty = 2, lwd = 1.3)
+abline(h = 42.91, col = "red", lty = 2, lwd = 1.3)
+abline(h = 34.6, col = "red", lty = 2, lwd = 1.3)
+abline(h = 26.5, col = "red", lty = 2, lwd = 1.3)
+text(5, c(52.8, 48.5, 44.4, 39, 30), paste("k =", 4:8), col = "blue", cex = 0.7)
 ```
 
 Cut the dendrogram at different heights to return the cluster sizes. Show the distribution of observations for 1 to 9 clusters.
 
 ```{r, message=FALSE}
-kmax <- 9
+max_k <- 9
 # Number of observations in each class
-xtabs(~cluster + max_clust, as.data.frame(cutree(hc, 1:kmax)) %>%
+xtabs(~cluster + max_clust, as.data.frame(cutree(hc, 1:max_k)) %>%
   pivot_longer(
-    cols = 1:kmax,
+    cols = 1:max_k,
     names_to = "max_clust",
     values_to = "cluster"
   )
 )
 ```
 
-This table indicates the distribution of observations at cluster levels 1 to 9. The dataset has 1905 observations, and this splits into 1751 and 154 at a cluster level of 2. At the third cluster level the dataset is split into 1410, 341 and 154 observations. It is noticeable that the majority of the data shows similiar characteristics, except for the 154 observations which are significantly different as they are always in one cluster by themselves throughout 9 levels. 
+This table indicates the distribution of observations at cluster levels 1 to 9. The dataset has 1905 observations, and this splits into 1768 and 137 at a cluster level of 2. At the third cluster level the dataset is split into 1368, 400 and 137 observations. It is noticeable that the majority of the data shows similiar characteristics, except for the 137 observations which are significantly different as they are always in one cluster by themselves throughout 9 levels. 
 
 ## Optimal Number of Clusters
 
@@ -1159,50 +1161,49 @@ wss_total <- function(df, labels) {
 }
 
 # Function to calculate the CH indices computed using hierarchical clustering
-ch_index <- function(df, kmax, hc) {
+ch_index <- function(df, max_k, hc) {
   npts <- nrow(df)
-  wss_values <- numeric(kmax) # create a vector of numeric type
+  wss_values <- numeric(max_k) # create a vector of numeric type
 
   # wss_values[1] stores the WSS value for k = 1
   # when all the data points form 1 large cluster
   wss_values[1] <- wss(df)
 
-  for (k in 2:kmax) {
+  for (k in 2:max_k) {
     labels <- cutree(hc, k)
     wss_values[k] <- wss_total(df, labels)
   }
 
   # CH Index = B / W
-  b <- (wss(df) - wss_values) / (0:(kmax - 1))
-  w <- wss_values / (npts - seq(kmax))
-  data.frame(k = seq(kmax), CH.index = b / w, WSS = wss_values)
+  b <- (wss(df) - wss_values) / (0:(max_k - 1))
+  w <- wss_values / (npts - seq(max_k))
+  data.frame(k = seq(max_k), CH.index = b / w, WSS = wss_values)
 }
 ```
 
 Plot the CH Index and WSS across different k values from 1 to 9 to visualise the optimal number of clusters.
 
 ```{r, warning=FALSE, fig.width=10, fig.height=3}
-ch_criterion <- ch_index(clustering_df, kmax, hc)
+ch_criterion <- ch_index(clustering_df, max_k, hc)
 grid.arrange(
   ggplot(ch_criterion, aes(x = k, y = CH.index)) +
     geom_point() +
     geom_line(colour = "red") +
-    scale_x_continuous(breaks = 1:kmax, labels = 1:kmax) +
+    scale_x_continuous(breaks = 1:max_k, labels = 1:max_k) +
     labs(y = "CH index"),
   ggplot(ch_criterion, aes(x = k, y = WSS), color = "blue") +
     geom_point() + geom_line(colour = "blue") +
-    scale_x_continuous(breaks = 1:kmax, labels = 1:kmax),
+    scale_x_continuous(breaks = 1:max_k, labels = 1:max_k),
   ncol = 2
 )
 ```
 
-The CH criterion is maximised at k = 2 and there is an almost local maximum at k = 6, whereas the WSS is minimised at k = 9 but with a slow down in the rate of change from k = 6, which can be considered a reasonable estimate of the optimal number of clusters. Thus 6 clusters seem to be a good choice to maximise the distance between clusters and minimise the variability within clusters.  
-
-As this hypothesis reinforces the choice of 6 clusters being the largest stable one, plot the dendrogram again with the 6 clusters to visualise it.
+The CH criterion is maximised at k = 2 with another local maximum at k = 8, whereas the WSS is minimised at k = 9. Therefore 8 clusters can be considered a reasonable estimate of the optimal number of clusters which maximises the distance between clusters and minimises the variability within clusters. As this hypothesis reinforces the conclusion from early on where 8 clusters is one the largest stable choices. Plot the dendrogram again but with the 8 clusters to visualise it.
 
 ```{r, fig.width=12, fig.height=8}
+optimal_k <- 8
 plot(hcd, ylab = "Height", leaflab = "none", horiz = FALSE)
-rect.hclust(hc, k = 6)
+rect.hclust(hc, k = optimal_k)
 ```
 
 ## Validating Clusters
@@ -1226,7 +1227,7 @@ find_convex_hull <- function(project_2d, clusters) {
 }
 
 fig <- c()
-for (k in 2:7) {
+for (k in seq(2, optimal_k + 1)) {
   clusters <- cutree(hc, k)
   project_2d_df <- cbind(
     project_2d,
@@ -1244,10 +1245,10 @@ for (k in 2:7) {
   )
 }
 
-grid.arrange(k2, k3, k4, k5, k6, k7, ncol = 3)
+grid.arrange(k2, k3, k4, k5, k6, k7, k8, k9, ncol = 4)
 ```
 
-As evident in the figure above, the data is first split into 2 clusters, the one on the left demonstrates significant variability as increasing the number of clusters always divides it into smaller clusters. On the other hand the right cluster never changes since the first split. 
+As evident in the figure above, the data is first split into 2 clusters, the large one on the left demonstrates significant variability as increasing the number of clusters always divides it into smaller clusters. On the other hand the small one on the right never changes since the first split. 
 
 ```{r, results=FALSE}
 # Find out how stable the clusters are
@@ -1255,11 +1256,11 @@ clusterboot_hclust <- clusterboot(
   clustering_df,
   clustermethod = hclustCBI,
   method = "ward.D2",
-  k = 6
+  k = optimal_k
 )
 ```
 
-Except for 1 cluster with a stability of 0.46, every other clusters are highly stable as their values are close to 1. This matches the cluster distribution above for k = 2 to 7 where that 1 big cluster is formed at the beginning and as the number of clusters increases, it is dissolved into smaller clusters while the others stay the same once the cluster is formed.
+Except for 1 cluster with a stability of 0.43, every other clusters are highly stable as their values are close to 1. This matches the cluster distribution above for k = 2 to 9 where that 1 big cluster is formed at the beginning and as the number of clusters increases, it is dissolved into smaller clusters while the others stay the same once the cluster is formed.
 
 ```{r}
 kable(data.frame(
@@ -1270,11 +1271,11 @@ kable(data.frame(
 
 ## Exploring Clusters 
 
-Now that the optimal number of clusters is found, use the 6 clusters to explore the patterns they represent in the data.
+Now that the optimal number of clusters is found, use the 8 clusters to explore the patterns they represent in the data.
 
 ```{r}
 # Append the cluster number to the original dataset
-df$Cluster <- as.factor(cutree(hc, 6))
+df$Cluster <- as.factor(cutree(hc, optimal_k))
 ```
 
 ### Job Locations
@@ -1313,7 +1314,7 @@ ggplot(df) +
   )
 ```
 
-Cluster 1 is the largest cluster and covers salaries between $60,000 to $108,000. Cluster 6 predominantly covers salaries in the range of $110,000 to $170,000. Cluster 3 covers the high end salaries over $180,000. Rest of the 3 clusters are overlapping in the lower end of the salaries below $60,000, but for the most part the figure demonstrates a separation of the data into "low", "medium", "high", and "very high" salaries.
+Cluster 5 is the largest cluster and covers the low end salaries below $110,000. Cluster 7 predominantly covers salaries in the range of $120,000 to $170,000. Cluster 3 covers the high end salaries over $180,000. The rest of the clusters overlap in the range from $60,000 to $130,000 but for the most part the figure demonstrates a separation of the data into "low", "medium", and "high" salaries.
 
 ### Rating
 
@@ -1333,6 +1334,6 @@ ggplot(df) +
   theme(axis.title.y = element_text(margin = margin(r = 5)))
 ```
 
-There is a much clear separation between clusters here. Cluster 5 contains all the low ratings of 1 as well as most of the ratings below 2.5. Cluster 2 is situated around higher ratings above 4.5. Cluster 4 centers at the medium rating of 3. Cluster 3 as the smallest cluster mostly contains the very high salaries with ratings between 4 and 5. Cluster 1 being the largest cluster covers the ratings around 4 but the lower end of the salaries while cluster 6 has the higher end of the same ratings.
+There is a much clearer separation between clusters here. Cluster 6 contains all the low ratings of 1. Cluster 8 covers the rating range between 1.5 to 3. Cluster 5 resides between rating 3 and 4 but the lower end of the salaries while cluster 7 has the higher end of the same ratings, and cluster 1 and 4 overlap with each other both centred around the medium salaries. Cluster 2 is situated at higher ratings above 4.5. Cluster 3 as the smallest cluster has all the very high salaries with ratings between 4 and 5.
 
 This separation comes from the fact that the only numerical variables in this dataset are the salaries and ratings so they are the determining factors in the clustering process.

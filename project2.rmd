@@ -874,7 +874,7 @@ ggplot(df) +
   )
 ```
 
-Cluster 1 is the largest cluster and covers salaries between $60,000 to $108,000. Cluster 6 predominantly covers salaries in the range of $110,000 to $170,000. Cluster 3 covers the high end salaries over $180,000. Rest of the 3 clusters are overlapping in the lower end of the salaries below $60,000, but for the most part the figure demonstrates a separation of the data into "low", "medium", "high", and "very high" salaries.
+Cluster 1 is the largest cluster and covers salaries between $70,000 to $120,000. Cluster 6 predominantly covers salaries in the range of $110,000 to $170,000. Cluster 3 covers the high end salaries over $180,000. Rest of the 3 clusters are overlapping in the lower end of the salaries below $60,000, but for the most part the figure demonstrates a separation of the data into "low", "medium", "high", and "very high" salaries.
 
 ### Rating
 
@@ -894,6 +894,6 @@ ggplot(df) +
   theme(axis.title.y = element_text(margin = margin(r = 5)))
 ```
 
-There is a much clear separation between clusters here. Cluster 5 contains all the low ratings of 1 as well as most of the ratings below 2.5. Cluster 2 is situated around higher ratings above 4.5. Cluster 4 centers at the medium rating of 3. Cluster 3 as the smallest cluster mostly contains the very high salaries with ratings between 4 and 5. Cluster 1 being the largest cluster covers the ratings around 4 but the lower end of the salaries while cluster 6 has the higher end of the same ratings.
+There is a much clearer separation between clusters here. Cluster 5 contains all the low ratings of 1 as well as most of the ratings below 2.5. Cluster 2 is situated around higher ratings above 4.5. Cluster 4 centers at the medium rating of 3. Cluster 3 as the smallest cluster mostly contains the very high salaries with ratings between 4 and 5. Cluster 1 being the largest cluster covers the ratings around 4 but the lower end of the salaries while cluster 6 has the higher end of the same ratings.
 
 This separation comes from the fact that the only numerical variables in this dataset are the salaries and ratings so they are the determining factors in the clustering process.
